@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audiomixpult Control</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-left">
+                <h1>🎚️ Audiomixpult Control</h1>
+                <span class="version">v1.0.0</span>
+            </div>
+            <div class="header-right">
+                <div class="connection-status" id="connectionStatus">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Nicht verbunden</span>
+                </div>
+                <button class="btn btn-settings" id="settingsBtn">⚙️ Einstellungen</button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Sidebar: Available Programs -->
+            <aside class="sidebar">
+                <div class="sidebar-header">
+                    <h2>📱 Verfügbare Programme</h2>
+                    <button class="btn btn-small" id="refreshApps">🔄</button>
+                </div>
+                
+                <!-- System Controls -->
+                <div class="program-group">
+                    <h3>System</h3>
+                    <div class="program-item" draggable="true" data-app="master" data-type="system">
+                        <span class="program-icon">🔊</span>
+                        <span class="program-name">Master Volume</span>
+                    </div>
+                    <div class="program-item" draggable="true" data-app="mic" data-type="system">
+                        <span class="program-icon">🎤</span>
+                        <span class="program-name">Mikrofon</span>
+                    </div>
+                </div>
+
+                <!-- Running Programs -->
+                <div class="program-group">
+                    <h3>Laufende Programme</h3>
+                    <div id="runningPrograms" class="programs-list">
+                        <!-- Dynamisch gefüllt -->
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Center: Mixer Sliders -->
+            <main class="mixer-area">
+                <div class="mixer-container" id="mixerContainer">
+                    <!-- Slider 1 -->
+                    <div class="mixer-channel" data-slider="0">
+                        <div class="channel-header">
+                            <span class="channel-number">1</span>
+                            <button class="btn-remove" title="Entfernen">×</button>
+                        </div>
+                        
+                        <div class="drop-zone" data-slider="0">
+                            <div class="drop-placeholder">
+                                <span class="drop-icon">⬇️</span>
+                                <span class="drop-text">Programm hierher ziehen</span>
+                            </div>
+                            <div class="assigned-app" style="display: none;">
+                                <span class="app-icon">🔊</span>
+                                <span class="app-name">Master</span>
+                            </div>
+                        </div>
+
+                        <div class="slider-container">
+                            <div class="slider-track">
+                                <div class="slider-fill" style="height: 0%"></div>
+                                <div class="slider-thumb"></div>
+                            </div>
+                            <div class="slider-value">0%</div>
+                        </div>
+
+                        <div class="channel-footer">
+                            <input type="text" class="channel-name" value="Slider 1" placeholder="Name...">
+                        </div>
+                    </div>
+
+                    <!-- Slider 2-5 (identisch) -->
+                    <div class="mixer-channel" data-slider="1">
+                        <div class="channel-header">
+                            <span class="channel-number">2</span>
+                            <button class="btn-remove" title="Entfernen">×</button>
+                        </div>
+                        <div class="drop-zone" data-slider="1">
+                            <div class="drop-placeholder">
+                                <span class="drop-icon">⬇️</span>
+                                <span class="drop-text">Programm hierher ziehen</span>
+                            </div>
+                            <div class="assigned-app" style="display: none;"></div>
+                        </div>
+                        <div class="slider-container">
+                            <div class="slider-track">
+                                <div class="slider-fill"></div>
+                                <div class="slider-thumb"></div>
+                            </div>
+                            <div class="slider-value">0%</div>
+                        </div>
+                        <div class="channel-footer">
+                            <input type="text" class="channel-name" value="Slider 2" placeholder="Name...">
+                        </div>
+                    </div>
+
+                    <div class="mixer-channel" data-slider="2">
+                        <div class="channel-header">
+                            <span class="channel-number">3</span>
+                            <button class="btn-remove" title="Entfernen">×</button>
+                        </div>
+                        <div class="drop-zone" data-slider="2">
+                            <div class="drop-placeholder">
+                                <span class="drop-icon">⬇️</span>
+                                <span class="drop-text">Programm hierher ziehen</span>
+                            </div>
+                            <div class="assigned-app" style="display: none;"></div>
+                        </div>
+                        <div class="slider-container">
+                            <div class="slider-track">
+                                <div class="slider-fill"></div>
+                                <div class="slider-thumb"></div>
+                            </div>
+                            <div class="slider-value">0%</div>
+                        </div>
+                        <div class="channel-footer">
+                            <input type="text" class="channel-name" value="Slider 3" placeholder="Name...">
+                        </div>
+                    </div>
+
+                    <div class="mixer-channel" data-slider="3">
+                        <div class="channel-header">
+                            <span class="channel-number">4</span>
+                            <button class="btn-remove" title="Entfernen">×</button>
+                        </div>
+                        <div class="drop-zone" data-slider="3">
+                            <div class="drop-placeholder">
+                                <span class="drop-icon">⬇️</span>
+                                <span class="drop-text">Programm hierher ziehen</span>
+                            </div>
+                            <div class="assigned-app" style="display: none;"></div>
+                        </div>
+                        <div class="slider-container">
+                            <div class="slider-track">
+                                <div class="slider-fill"></div>
+                                <div class="slider-thumb"></div>
+                            </div>
+                            <div class="slider-value">0%</div>
+                        </div>
+                        <div class="channel-footer">
+                            <input type="text" class="channel-name" value="Slider 4" placeholder="Name...">
+                        </div>
+                    </div>
+
+                    <div class="mixer-channel" data-slider="4">
+                        <div class="channel-header">
+                            <span class="channel-number">5</span>
+                            <button class="btn-remove" title="Entfernen">×</button>
+                        </div>
+                        <div class="drop-zone" data-slider="4">
+                            <div class="drop-placeholder">
+                                <span class="drop-icon">⬇️</span>
+                                <span class="drop-text">Programm hierher ziehen</span>
+                            </div>
+                            <div class="assigned-app" style="display: none;"></div>
+                        </div>
+                        <div class="slider-container">
+                            <div class="slider-track">
+                                <div class="slider-fill"></div>
+                                <div class="slider-thumb"></div>
+                            </div>
+                            <div class="slider-value">0%</div>
+                        </div>
+                        <div class="channel-footer">
+                            <input type="text" class="channel-name" value="Slider 5" placeholder="Name...">
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Settings Modal -->
+        <div class="modal" id="settingsModal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>⚙️ Einstellungen</h2>
+                    <button class="btn-close" id="closeSettings">×</button>
+                </div>
+                
+                <div class="modal-body">
+                    <div class="settings-section">
+                        <h3>Arduino Verbindung</h3>
+                        
+                        <div class="form-group">
+                            <label>COM-Port:</label>
+                            <select id="comPortSelect" class="form-control">
+                                <option value="">Wähle einen Port...</option>
+                            </select>
+                            <button class="btn btn-primary" id="connectBtn">Verbinden</button>
+                            <button class="btn btn-secondary" id="refreshPortsBtn">Ports aktualisieren</button>
+                        </div>
+
+                        <div class="connection-info" id="connectionInfo" style="display: none;">
+                            <p><strong>Status:</strong> <span id="portStatus">Verbunden</span></p>
+                            <p><strong>Port:</strong> <span id="portName">-</span></p>
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <h3>Profile</h3>
+                        <div class="form-group">
+                            <label>Aktuelles Profil:</label>
+                            <select id="profileSelect" class="form-control">
+                                <option value="default">Standard</option>
+                                <option value="gaming">Gaming</option>
+                                <option value="streaming">Streaming</option>
+                                <option value="work">Office</option>
+                            </select>
+                            <button class="btn btn-primary" id="saveProfileBtn">Profil speichern</button>
+                            <button class="btn btn-secondary" id="newProfileBtn">Neues Profil</button>
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <h3>Über</h3>
+                        <p><strong>Audiomixpult Control</strong></p>
+                        <p>Version: 1.0.0</p>
+                        <p>Entwickelt von: JonasGrafKWR</p>
+                        <p>
+                            <a href="#" id="githubLink">GitHub Repository</a> | 
+                            <a href="#" id="docsLink">Dokumentation</a>
+                        </p>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" id="cancelSettings">Schließen</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>

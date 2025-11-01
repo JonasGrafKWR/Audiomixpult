@@ -1,0 +1,25 @@
+# Ignoriere node modules und build artifacts
+node_modules/
+dist/
+build/
+
+# OS-spezifische Dateien
+.DS_Store
+Thumbs.db
+
+# IDE-Dateien
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Config-Dateien (lokal)
+config.json
+
+# Temporary files
+*.tmp
+.cache/

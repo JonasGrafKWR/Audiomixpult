@@ -1,0 +1,163 @@
+# DEEJ Konfigurationsdatei für Audiomixpult
+# Speichere diese Datei als "config.yaml" im DEEJ-Verzeichnis
+
+# Slider Mapping: Ordne jedem Regler (0-4) eine Anwendung zu
+slider_mapping:
+  # Slider 0 (Erster Regler von links)
+  0: master
+  
+  # Slider 1 
+  1: discord.exe
+  
+  # Slider 2
+  2: spotify.exe
+  
+  # Slider 3
+  3: chrome.exe
+  
+  # Slider 4
+  4: deej.unmapped
+
+# WICHTIG: COM-Port des Arduino Nano
+# Finde den Port im Gerätemanager (Windows) unter "Anschlüsse (COM & LPT)"
+# Oder in der Arduino IDE unter Tools -> Port
+com_port: COM3
+
+# Wie oft die Prozessliste aktualisiert wird (in Sekunden)
+# Erhöhen bei Performance-Problemen
+process_refresh_frequency: 5
+
+# Lautstärke beim Start halten (true) oder auf Regler-Position setzen (false)
+invert_sliders: false
+
+# Noise Reduction - ignoriert kleine Wertänderungen
+# Standard: 1 (kann erhöht werden bei zittrigen Reglern)
+noise_reduction: 1
+
+# ============================================
+# HÄUFIGE ANWENDUNGEN (Prozessnamen)
+# ============================================
+# 
+# Kommunikation:
+#   - discord.exe
+#   - teamspeak3.exe
+#   - skype.exe
+#   - zoom.exe
+#   - slack.exe
+#
+# Musik & Media:
+#   - spotify.exe
+#   - vlc.exe
+#   - wmplayer.exe (Windows Media Player)
+#   - foobar2000.exe
+#
+# Browser:
+#   - chrome.exe
+#   - firefox.exe
+#   - msedge.exe (Microsoft Edge)
+#   - opera.exe
+#
+# Gaming:
+#   - csgo.exe
+#   - League of Legends.exe
+#   - Overwatch.exe
+#   - minecraft.exe
+#
+# Streaming:
+#   - obs64.exe (OBS Studio)
+#   - streamlabs obs.exe
+#
+# System:
+#   - master (Gesamt-Systemlautstärke)
+#   - mic (Mikrofon)
+#   - system (System-Sounds)
+#   - deej.unmapped (Nicht zugeordnet)
+#
+# ============================================
+# ERWEITERTE BEISPIELE
+# ============================================
+
+# Beispiel 1: Gaming-Setup
+# slider_mapping:
+#   0: master
+#   1: discord.exe
+#   2: spotify.exe
+#   3: csgo.exe
+#   4: chrome.exe
+
+# Beispiel 2: Streaming-Setup
+# slider_mapping:
+#   0: master
+#   1: obs64.exe
+#   2: discord.exe
+#   3: spotify.exe
+#   4: chrome.exe
+
+# Beispiel 3: Office/Homeoffice-Setup
+# slider_mapping:
+#   0: master
+#   1: zoom.exe
+#   2: slack.exe
+#   3: spotify.exe
+#   4: chrome.exe
+
+# Beispiel 4: Mikrofon-Kontrolle
+# slider_mapping:
+#   0: master
+#   1: mic
+#   2: discord.exe
+#   3: spotify.exe
+#   4: chrome.exe
+
+# ============================================
+# TIPPS
+# ============================================
+#
+# 1. Prozessnamen finden:
+#    - Windows: Task-Manager öffnen (Strg+Shift+Esc)
+#    - Tab "Details" öffnen
+#    - Prozessname in der Spalte "Name" ablesen
+#
+# 2. Mehrere Anwendungen einem Regler zuordnen:
+#    slider_mapping:
+#      0: [chrome.exe, firefox.exe, msedge.exe]
+#
+# 3. Geräte steuern (z.B. Lautsprecher):
+#    slider_mapping:
+#      0: ["Lautsprecher (Realtek High Definition Audio)"]
+#    
+#    Exakter Gerätename aus Windows Sound-Einstellungen
+#
+# 4. Session-Gruppen:
+#    slider_mapping:
+#      0: master
+#      1: 
+#        - discord.exe
+#        - teamspeak3.exe
+#      2: spotify.exe
+#
+# 5. Debug-Mode aktivieren (für Fehlersuche):
+#    Füge diese Zeile hinzu:
+#    log_level: debug
+#
+# ============================================
+# TROUBLESHOOTING
+# ============================================
+#
+# Problem: Anwendung wird nicht gefunden
+# Lösung: 
+#   - Prozessname mit .exe-Endung schreiben
+#   - Klein-/Großschreibung beachten
+#   - Anwendung muss Audio abspielen
+#
+# Problem: Regler zittert/springt
+# Lösung:
+#   - noise_reduction erhöhen (z.B. auf 3)
+#   - NOISE_THRESHOLD im Arduino Code erhöhen
+#
+# Problem: COM-Port nicht gefunden
+# Lösung:
+#   - Arduino anschließen
+#   - Gerätemanager öffnen
+#   - COM-Port unter "Anschlüsse" ablesen
+#   - com_port: entsprechend anpassen
