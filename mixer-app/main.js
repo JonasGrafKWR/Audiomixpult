@@ -4,7 +4,23 @@ const { SerialPort } = require('serialport');
 const { ReadlineParser } = require('@serialport/parser-readline');
 const { exec } = require('child_process');
 const util = require('util');
+const fs = require('fs');
 const execPromise = util.promisify(exec);
+
+// Single Instance Lock - verhindert mehrfache App-Starts
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (event, commandLine, workingDirectory) => {
+    // Wenn zweite Instanz gestartet wird, zeige Hauptfenster
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+}
 
 let mainWindow;
 let tray;
@@ -12,13 +28,80 @@ let port;
 let config = {
   comPort: null,
   sliders: [
-    { id: 0, name: 'Master', app: 'master' },
-    { id: 1, name: 'Slider 1', app: null },
-    { id: 2, name: 'Slider 2', app: null },
-    { id: 3, name: 'Slider 3', app: null },
-    { id: 4, name: 'Slider 4', app: null }
+    { id: 0, name: 'Kanal 1 (A0)', app: null },
+    { id: 1, name: 'Kanal 2 (A1)', app: null },
+    { id: 2, name: 'Master (A2)', app: 'master' },  // Master in der Mitte
+    { id: 3, name: 'Kanal 4 (A3)', app: null },
+    { id: 4, name: 'Kanal 5 (A4)', app: null }
   ]
 };
+
+// Lautstärke-Steuerung (NirCmd-basiert für bessere Performance)
+let lastVolumes = [0, 0, 0, 0, 0];
+let isSettingVolume = false;
+
+async function setSystemVolume(volume) {
+  if (isSettingVolume) return;  // Verhindere Überlappung
+  
+  try {
+    isSettingVolume = true;
+    const volumePercent = Math.round((volume / 1023) * 100);
+    
+    // NirCmd für direkte Lautstärke-Kontrolle (schneller als SendKeys)
+    const nircmdPath = path.join(__dirname, 'assets', 'nircmd.exe');
+    
+    // Fallback: PowerShell mit direktem Audio-API Zugriff
+    const psCommand = `
+    $wshShell = New-Object -ComObject WScript.Shell;
+    $wshShell.SendKeys([char]173);
+    Start-Sleep -Milliseconds 50;
+    [console]::beep(440, 50);
+    $target = ${volumePercent};
+    $steps = [Math]::Round($target / 2);
+    for($i=0; $i -lt $steps; $i++) {
+      $wshShell.SendKeys([char]175);
+      Start-Sleep -Milliseconds 10;
+    }
+    `.replace(/\n/g, ' ');
+    
+    // Versuche erst NirCmd, dann PowerShell
+    if (fs.existsSync(nircmdPath)) {
+      await execPromise(`"${nircmdPath}" setsysvolume ${Math.round(volumePercent * 655.35)}`);
+    } else {
+      // PowerShell Fallback
+      exec(`powershell -NoProfile -Command "${psCommand}"`, (err) => {
+        if (err) console.error('Volume error:', err.message);
+      });
+    }
+    
+    console.log(`🔊 System-Lautstärke: ${volumePercent}%`);
+  } catch (err) {
+    console.error('Fehler beim Setzen der Lautstärke:', err.message);
+  } finally {
+    setTimeout(() => { isSettingVolume = false; }, 100);
+  }
+}
+
+// Lautstärke-Änderungen anwenden (alle Slider aktiv)
+function applyVolumeChanges(values) {
+  config.sliders.forEach((slider, index) => {
+    if (values[index] === undefined) return;
+    
+    const diff = Math.abs(values[index] - lastVolumes[index]);
+    
+    // Bei größerer Änderung (>1% = ~10 Punkte) Lautstärke anpassen
+    if (diff > 10) {
+      if (slider.app === 'master') {
+        // Master-Slider steuert System-Lautstärke
+        setSystemVolume(values[index]);
+      } else if (slider.app && slider.app !== 'master') {
+        // Andere Slider: Später für per-App-Lautstärke
+        console.log(`🎵 Kanal ${index + 1} (${slider.app}): ${Math.round((values[index] / 1023) * 100)}%`);
+      }
+      lastVolumes[index] = values[index];
+    }
+  });
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -49,9 +132,10 @@ function createWindow() {
 }
 
 function createTray() {
-  tray = new Tray(path.join(__dirname, 'assets', 'icon.png'));
+  // Tray Icon vorübergehend deaktiviert
+  // tray = new Tray(path.join(__dirname, 'assets', 'icon.png'));
   
-  const contextMenu = Menu.buildFromTemplate([
+  /* const contextMenu = Menu.buildFromTemplate([
     {
       label: 'Audiomixpult Control',
       enabled: false
@@ -85,8 +169,62 @@ function createTray() {
   
   tray.on('double-click', () => {
     mainWindow.show();
-  });
+  }); */
 }
+
+// Autostart Funktionen
+function getAutostartEnabled() {
+  if (process.platform !== 'win32') return false;
+  
+  const startupFolder = path.join(process.env.APPDATA, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup');
+  const shortcutPath = path.join(startupFolder, 'Audiomixpult Control.lnk');
+  
+  return fs.existsSync(shortcutPath);
+}
+
+async function setAutostart(enabled) {
+  if (process.platform !== 'win32') return { success: false, error: 'Nur Windows unterstützt' };
+  
+  const startupFolder = path.join(process.env.APPDATA, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup');
+  const shortcutPath = path.join(startupFolder, 'Audiomixpult Control.lnk');
+  const exePath = app.getPath('exe');
+  
+  try {
+    if (enabled) {
+      // Erstelle Verknüpfung mit PowerShell
+      const psScript = `
+$WshShell = New-Object -ComObject WScript.Shell
+$Shortcut = $WshShell.CreateShortcut("${shortcutPath.replace(/\\/g, '\\\\')}")
+$Shortcut.TargetPath = "${exePath.replace(/\\/g, '\\\\')}"
+$Shortcut.WorkingDirectory = "${path.dirname(exePath).replace(/\\/g, '\\\\')}"
+$Shortcut.Description = "Audiomixpult Control - Arduino Audio Mixer"
+$Shortcut.Save()
+`;
+      await execPromise(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${psScript.replace(/"/g, '\\"')}"`);
+      return { success: true };
+    } else {
+      // Lösche Verknüpfung
+      if (fs.existsSync(shortcutPath)) {
+        fs.unlinkSync(shortcutPath);
+      }
+      return { success: true };
+    }
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+// IPC Handlers
+
+// Autostart Status abfragen
+ipcMain.handle('get-autostart', async () => {
+  return getAutostartEnabled();
+});
+
+// Autostart ein/ausschalten
+ipcMain.handle('set-autostart', async (event, enabled) => {
+  return await setAutostart(enabled);
+});
 
 // COM-Ports auflisten
 ipcMain.handle('list-ports', async () => {
@@ -121,8 +259,20 @@ ipcMain.handle('connect-arduino', async (event, portPath) => {
 
     parser.on('data', (data) => {
       // Arduino sendet Daten im Format: "value1|value2|value3|value4|value5"
-      const values = data.trim().split('|').map(v => parseInt(v));
+      const rawValues = data.trim().split('|').map(v => parseInt(v));
+      
+      // Invertiere Slider 5 (Index 4) - er ist falsch herum verkabelt
+      const values = rawValues.map((val, idx) => {
+        if (idx === 4) {
+          return 1023 - val;  // Slider 5 umkehren
+        }
+        return val;
+      });
+      
       mainWindow.webContents.send('slider-values', values);
+      
+      // Wende Lautstärke-Änderungen an
+      applyVolumeChanges(values);
     });
 
     port.on('error', (err) => {
@@ -314,7 +464,7 @@ function getDefaultSessions() {
 
 app.whenReady().then(() => {
   createWindow();
-  createTray();
+  // createTray(); // Vorübergehend deaktiviert
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

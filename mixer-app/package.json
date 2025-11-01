@@ -7,7 +7,8 @@
     "start": "electron .",
     "dev": "electron . --dev",
     "build": "electron-builder",
-    "build:win": "electron-builder --win --x64",
+    "build:win": "electron-builder --win --x64 --config.win.sign=null",
+    "build:portable": "electron-builder --win portable --x64 --config.win.sign=null",
     "pack": "electron-builder --dir"
   },
   "keywords": [
@@ -24,24 +25,48 @@
     "electron-builder": "^24.9.1"
   },
   "dependencies": {
-    "serialport": "^12.0.0",
-    "@serialport/parser-readline": "^12.0.0"
+    "@serialport/parser-readline": "^12.0.0",
+    "loudness": "^0.4.2",
+    "serialport": "^12.0.0"
   },
   "build": {
     "appId": "com.jonasgrafkwr.audiomixpult",
     "productName": "Audiomixpult Control",
+    "copyright": "Copyright © 2025 JonasGrafKWR",
     "win": {
       "target": [
-        "nsis",
-        "portable"
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
       ],
-      "icon": "assets/icon.ico"
+      "icon": "assets/icon.png",
+      "publisherName": "JonasGrafKWR",
+      "verifyUpdateCodeSignature": false,
+      "sign": null,
+      "signingHashAlgorithms": null
     },
     "nsis": {
       "oneClick": false,
+      "allowElevation": false,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Audiomixpult Control",
+      "installerIcon": "assets/icon.png",
+      "uninstallerIcon": "assets/icon.png",
+      "license": "../LICENSE",
+      "runAfterFinish": true,
+      "menuCategory": true,
+      "deleteAppDataOnUninstall": true
+    },
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
     },
     "files": [
       "**/*",

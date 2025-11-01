@@ -82,6 +82,24 @@ function setupEventListeners() {
     connectBtn.addEventListener('click', connectArduino);
     refreshPortsBtn.addEventListener('click', refreshPorts);
 
+    // Autostart Checkbox
+    const autostartCheckbox = document.getElementById('autostartCheckbox');
+    if (autostartCheckbox) {
+        // Lade aktuellen Status
+        ipcRenderer.invoke('get-autostart').then(enabled => {
+            autostartCheckbox.checked = enabled;
+        });
+
+        // Bei Änderung speichern
+        autostartCheckbox.addEventListener('change', async (e) => {
+            const result = await ipcRenderer.invoke('set-autostart', e.target.checked);
+            if (!result.success) {
+                alert('Fehler beim Setzen des Autostarts: ' + (result.error || 'Unbekannter Fehler'));
+                e.target.checked = !e.target.checked; // Zurücksetzen
+            }
+        });
+    }
+
     // Remove button for sliders
     document.querySelectorAll('.btn-remove').forEach(btn => {
         btn.addEventListener('click', (e) => {
