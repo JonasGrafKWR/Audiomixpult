@@ -41,44 +41,62 @@ let lastVolumes = [0, 0, 0, 0, 0];
 let isSettingVolume = false;
 
 async function setSystemVolume(volume) {
-  if (isSettingVolume) return;  // Verhindere Überlappung
+  if (isSettingVolume) return;
   
   try {
     isSettingVolume = true;
     const volumePercent = Math.round((volume / 1023) * 100);
-    
-    // NirCmd für direkte Lautstärke-Kontrolle (schneller als SendKeys)
     const nircmdPath = path.join(__dirname, 'assets', 'nircmd.exe');
     
-    // Fallback: PowerShell mit direktem Audio-API Zugriff
-    const psCommand = `
-    $wshShell = New-Object -ComObject WScript.Shell;
-    $wshShell.SendKeys([char]173);
-    Start-Sleep -Milliseconds 50;
-    [console]::beep(440, 50);
-    $target = ${volumePercent};
-    $steps = [Math]::Round($target / 2);
-    for($i=0; $i -lt $steps; $i++) {
-      $wshShell.SendKeys([char]175);
-      Start-Sleep -Milliseconds 10;
-    }
-    `.replace(/\n/g, ' ');
-    
-    // Versuche erst NirCmd, dann PowerShell
     if (fs.existsSync(nircmdPath)) {
       await execPromise(`"${nircmdPath}" setsysvolume ${Math.round(volumePercent * 655.35)}`);
-    } else {
-      // PowerShell Fallback
-      exec(`powershell -NoProfile -Command "${psCommand}"`, (err) => {
-        if (err) console.error('Volume error:', err.message);
-      });
+      console.log(`🔊 System-Lautstärke: ${volumePercent}%`);
     }
-    
-    console.log(`🔊 System-Lautstärke: ${volumePercent}%`);
   } catch (err) {
     console.error('Fehler beim Setzen der Lautstärke:', err.message);
   } finally {
     setTimeout(() => { isSettingVolume = false; }, 100);
+  }
+}
+
+async function setAppVolume(appName, volume) {
+  try {
+    const volumePercent = Math.round((volume / 1023) * 100);
+    const nircmdPath = path.join(__dirname, 'assets', 'nircmd.exe');
+    
+    if (!fs.existsSync(nircmdPath)) return;
+    
+    // NirCmd setappvolume: Setzt Lautstärke für spezifische App
+    // Format: nircmd.exe setappvolume <prozessname.exe> <wert 0.0-1.0>
+    const volumeValue = (volumePercent / 100).toFixed(2);
+    
+    // Prozessnamen zu EXE-Namen konvertieren
+    let exeName = appName.toLowerCase();
+    
+    // Mapping für bekannte Programme
+    const appMapping = {
+      'amazon music': 'amazon music.exe',
+      'msedge': 'msedge.exe',
+      'code': 'code.exe',
+      'anno1800': 'anno1800.exe',
+      'spotify': 'spotify.exe',
+      'discord': 'discord.exe',
+      'chrome': 'chrome.exe',
+      'firefox': 'firefox.exe'
+    };
+    
+    // Verwende Mapping oder füge .exe hinzu
+    if (appMapping[exeName]) {
+      exeName = appMapping[exeName];
+    } else if (!exeName.endsWith('.exe')) {
+      exeName += '.exe';
+    }
+    
+    // Führe NirCmd aus
+    await execPromise(`"${nircmdPath}" setappvolume "${exeName}" ${volumeValue}`);
+    console.log(`🎵 ${appName} (${exeName}): ${volumePercent}%`);
+  } catch (err) {
+    console.error(`Fehler bei App-Lautstärke (${appName}):`, err.message);
   }
 }
 
@@ -95,8 +113,8 @@ function applyVolumeChanges(values) {
         // Master-Slider steuert System-Lautstärke
         setSystemVolume(values[index]);
       } else if (slider.app && slider.app !== 'master') {
-        // Andere Slider: Später für per-App-Lautstärke
-        console.log(`🎵 Kanal ${index + 1} (${slider.app}): ${Math.round((values[index] / 1023) * 100)}%`);
+        // Per-App-Lautstärke für zugewiesene Programme
+        setAppVolume(slider.app, values[index]);
       }
       lastVolumes[index] = values[index];
     }
