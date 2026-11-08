@@ -1,129 +1,53 @@
-# 🎚️ Audiomixpult Control - Installation
+# 🎚️ Audiomixpult Control - Installation (experimentell)
 
-## Windows Installer erstellen
+> ⚠️ Die App ist ein nicht gepflegter Prototyp. Für den Alltag deej verwenden, siehe [Haupt-README](../README.md). Bekannte Einschränkungen stehen in [README.md](README.md).
 
-### Voraussetzungen
-- Node.js installiert
-- Alle Dependencies installiert (`npm install`)
+## Windows-Installer erstellen
 
-### Installer bauen
+Voraussetzungen: Node.js und installierte Abhängigkeiten (`npm install`).
 
 ```powershell
-cd C:\Users\Jonas\Audiomixpult\mixer-app
+cd mixer-app
 npm run build:win
 ```
 
-Das erstellt zwei Installer-Varianten in `dist/`:
+Das erzeugt zwei Varianten im lokalen Ordner `dist/` (der Ordner ist nicht im Repo):
 
-1. **NSIS Installer** (`Audiomixpult Control Setup 1.0.0.exe`)
-   - Vollständiger Windows-Installer
-   - Erstellt Startmenü-Einträge
-   - Erstellt Desktop-Verknüpfung
-   - Deinstallations-Programm enthalten
-   - Installationspfad wählbar
+1. **NSIS-Installer** (`Audiomixpult Control Setup 1.0.0.exe`) mit Startmenü-Eintrag, Desktop-Verknüpfung und Deinstallation
+2. **Portable Version** (`Audiomixpult Control 1.0.0.exe`) ohne Installation
 
-2. **Portable Version** (`Audiomixpult Control 1.0.0.exe`)
-   - Keine Installation nötig
-   - Direkt ausführbar
-   - Ideal für USB-Stick
-
-## Features der App
-
-### ✅ Vollständige Windows-Integration
-
-- **Startmenü**: App erscheint in Windows-Suche als "Audiomixpult Control"
-- **Desktop-Icon**: Verknüpfung auf dem Desktop nach Installation
-- **Autostart**: Optional mit Windows starten (in Einstellungen aktivierbar)
-- **Taskleiste**: App erscheint in der Taskleiste
-- **Single Instance**: Verhindert mehrfache App-Starts
-
-### 🎛️ Features
-
-- 5 Arduino-gesteuerte Lautstärkeregler
-- Drag & Drop Programm-Zuweisung
-- Automatische Programm-Erkennung
-- System-Lautstärke-Steuerung (Master-Kanal)
-- Profile für verschiedene Nutzungsszenarien
-- Moderne Dark-Theme UI
-- Echtzeit Arduino-Datenvisualisierung
-
-### 🔧 Einstellungen
-
-- COM-Port-Auswahl für Arduino
-- Autostart mit Windows
-- Minimierung in Taskleiste
-- Profil-Verwaltung (Gaming, Streaming, Office)
+Die Installer sind **nicht code-signiert**. Windows kann beim Start eine Warnung zeigen.
 
 ## Nach der Installation
 
-### 1. Arduino anschließen
-- Arduino Nano V3 per USB verbinden
-- Warten bis CH340-Treiber erkannt
+1. Arduino mit dem Audiomixer-Sketch anschließen (CH340-Treiber nötig, siehe [Haupt-README](../README.md)).
+2. deej beenden. Der COM-Port kann nur von einem Programm geöffnet werden.
+3. App starten, **⚙️ Einstellungen** öffnen, COM-Port wählen, **Verbinden**.
+4. Programme aus der Seitenleiste per Drag & Drop auf Regler ziehen.
 
-### 2. App starten
-- Windows-Suche: "Audiomixpult" eingeben
-- Oder Desktop-Icon doppelklicken
-- Oder im Startmenü unter "Audiomixpult Control"
+COM-Port und Zuordnungen werden **nicht gespeichert** und müssen bei jedem Start neu eingestellt werden.
 
-### 3. Verbinden
-- Einstellungen öffnen (⚙️ Symbol)
-- COM-Port auswählen (z.B. COM3)
-- "Verbinden" klicken
+## Autostart
 
-### 4. Programme zuweisen
-- Sidebar zeigt alle laufenden Programme
-- Programm per Drag & Drop auf Slider ziehen
-- Regler bewegen = Lautstärke ändern
+In den Einstellungen "Mit Windows starten" aktivieren. Die App legt dazu eine Verknüpfung an:
 
-## Autostart aktivieren
-
-1. App öffnen
-2. Einstellungen (⚙️) öffnen
-3. "Allgemeine Einstellungen"
-4. ✅ "Mit Windows starten" aktivieren
-5. Fertig! App startet ab jetzt automatisch
-
-Die Verknüpfung wird erstellt in:
 ```
-%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\
+%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\Audiomixpult Control.lnk
 ```
+
+Das ist nur in der gebauten App sinnvoll. Im Entwicklungsmodus zeigt die Verknüpfung auf `electron.exe`.
 
 ## Deinstallation
 
-### Via Windows Einstellungen:
-1. Windows-Einstellungen öffnen
-2. Apps → Installierte Apps
-3. "Audiomixpult Control" suchen
-4. Deinstallieren
-
-### Via Systemsteuerung:
-1. Systemsteuerung → Programme und Features
-2. "Audiomixpult Control" auswählen
-3. Deinstallieren
+Windows-Einstellungen → Apps → Installierte Apps → "Audiomixpult Control" → Deinstallieren. Die Autostart-Verknüpfung (siehe oben) gegebenenfalls von Hand löschen.
 
 ## Troubleshooting
 
-### App erscheint nicht in Windows-Suche
-- Nach Installation PC neu starten
-- Suchindex aktualisieren (Windows-Einstellungen → Suche)
-
-### Arduino nicht erkannt
-- CH340 Treiber installieren
-- USB-Kabel abziehen und neu einstecken
-- Anderen USB-Port versuchen
-
-### Lautstärke ändert sich nicht
-- Nur Master-Slider (Slider 1) steuert aktuell System-Lautstärke
-- Weitere Potentiometer müssen physisch angeschlossen sein (A0-A3)
+- **Arduino nicht erkannt:** CH340-Treiber prüfen, anderes USB-Kabel oder anderen Port probieren.
+- **Lautstärke ändert sich nicht:** Ein Regler ohne Zuordnung bewirkt nichts. Programme müssen Ton ausgeben.
+- **Fenster geschlossen, App nicht mehr erreichbar:** Das Schließen versteckt das Fenster nur (der Tray ist deaktiviert). Die App im Task-Manager beenden und neu starten.
 
 ## Systemanforderungen
 
-- **OS**: Windows 10/11 (64-bit)
-- **RAM**: Minimum 4GB
-- **Festplatte**: 200MB freier Speicher
-- **Hardware**: Arduino Nano V3 mit CH340 USB-Chip
-- **.NET Framework**: 4.7.2 oder höher (normalerweise vorinstalliert)
-
-## Lizenz
-
-MIT License - siehe LICENSE Datei im Repository
+- Windows 10/11 (64-bit)
+- Arduino Nano V3 mit CH340-USB-Chip
