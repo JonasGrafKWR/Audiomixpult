@@ -91,6 +91,22 @@ body {
 
 .status-dot.connected {
     background: var(--success-color);
+    animation: none;
+}
+
+.status-dot.connecting {
+    background: var(--warning-color);
+}
+
+.status-dot.error {
+    background: var(--danger-color);
+}
+
+.status-text {
+    max-width: 420px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 @keyframes pulse {
@@ -306,7 +322,7 @@ body {
 
 /* Drop Zone */
 .drop-zone {
-    min-height: 80px;
+    min-height: 150px;
     margin-bottom: 1rem;
     border: 2px dashed var(--border-color);
     border-radius: 8px;

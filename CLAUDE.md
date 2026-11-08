@@ -1,6 +1,6 @@
 # Audiomixpult
 
-DIY-Hardware-Lautstärkemixer für Windows: Arduino Nano V3 liest 5 Schiebepotis und sendet die Werte seriell an den PC. Die Lautstärke setzt das Original-**deej** (https://github.com/omriharel/deej). Die Electron-App in `mixer-app/` ist ein experimenteller, nicht gepflegter Ersatz.
+DIY-Hardware-Lautstärkemixer für Windows: Arduino Nano V3 liest 5 Schiebepotis und sendet die Werte seriell an den PC. Die Lautstärke setzt das Original-**deej** (https://github.com/omriharel/deej). Die Electron-App in `mixer-app/` ist eine Alternative (weniger erprobt als deej).
 
 ## Hardware
 
@@ -14,7 +14,7 @@ DIY-Hardware-Lautstärkemixer für Windows: Arduino Nano V3 liest 5 Schiebepotis
 - `audiomixer/audiomixer.ino`: Sketch (Einstellungen oben: `NUM_SLIDERS`, `ANALOG_PINS`, `INVERT`, `NUM_READINGS`, `SNAP_MARGIN`)
 - `config-example.yaml`: Beispiel-Config für deej
 - `docs/`: Hardware-Doku, Einkaufsliste
-- `mixer-app/`: Electron-App (experimentell, bekannte Fehler siehe `mixer-app/README.md`)
+- `mixer-app/`: Electron-App (Alternative zu deej, Einschränkungen siehe `mixer-app/README.md`). Tests: `cd mixer-app && npm test`. Lautstärke setzt ein dauerhafter PowerShell-Helfer (`assets/audio-helper.ps1`), nicht mehr NirCmd. Zum Prüfen der echten App: `electron . --remote-debugging-port=9222 --user-data-dir=<Testordner>` (getrennte Config), COM-Port ist dann für deej gesperrt.
 
 ## Serielles Protokoll (deej-kompatibel)
 
@@ -43,5 +43,5 @@ DIY-Hardware-Lautstärkemixer für Windows: Arduino Nano V3 liest 5 Schiebepotis
 
 - Sprache: Deutsch (Doku, Code-Kommentare, Commit-Messages)
 - Arbeit auf Branches, kleine Commits, **nichts auf `main` pushen**
-- Keine neuen Binärdateien einchecken (die vorhandenen NirCmd-Dateien in `mixer-app/assets/` bleiben)
+- Keine neuen Binärdateien einchecken (die vorhandenen NirCmd-Dateien in `mixer-app/assets/` bleiben liegen, werden aber nicht mehr benutzt)
 - Keine globalen Installationen ohne Rückfrage

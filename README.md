@@ -12,7 +12,7 @@ Der Arduino liest fünf Potentiometer aus und schickt die Werte über USB (serie
 - den **Arduino-Sketch** (`audiomixer/audiomixer.ino`), kompatibel zum deej-Protokoll,
 - eine **Beispiel-Konfiguration** für deej (`config-example.yaml`),
 - Hardware-Doku und Einkaufsliste (`docs/`),
-- eine **experimentelle** eigene Desktop-App (`mixer-app/`), siehe unten. Empfohlen wird deej.
+- eine eigene **Desktop-App** (`mixer-app/`) als Alternative, siehe unten. Empfohlen wird weiterhin deej.
 
 **Was der Sketch gegenüber dem deej-Original macht:**
 - Glättung der Analogwerte (gleitender Mittelwert über 4 Messungen), das reduziert Zittern.
@@ -120,9 +120,9 @@ Wichtig:
 
 deej starten, Regler bewegen, fertig. Die Konfiguration steht in `config.yaml`. Bei Problemen die Datei `logs/deej-latest-run.log` neben `deej.exe` ansehen, oder deej im Terminal mit `deej.exe --verbose` starten.
 
-### Option 2: Eigene Desktop-App (experimentell)
+### Option 2: Eigene Desktop-App
 
-Im Ordner [mixer-app/](mixer-app/) liegt eine eigene Electron-App (serialport + NirCmd). Sie ist **experimentell und nicht gepflegt**: Konfiguration wird nicht gespeichert, Lautstärke wird über jeweils einen eigenen Prozess pro Änderung gesetzt, und es gibt bekannte Fehler und Sicherheitsmängel. Details in [mixer-app/README.md](mixer-app/README.md). Für den Alltag deej verwenden.
+Im Ordner [mixer-app/](mixer-app/) liegt eine eigene Electron-App mit grafischer Oberfläche (Drag & Drop, Live-Anzeige der Regler, Profile, Tray). Sie speichert ihre Konfiguration, verbindet automatisch neu und setzt die Lautstärke über einen dauerhaft laufenden Helfer (Windows Core Audio). Sie ist weniger erprobt als deej und kennt weniger Ziele (kein `deej.current`, keine Gerätenamen). Details und Einschränkungen in [mixer-app/README.md](mixer-app/README.md). App und deej können den COM-Port nicht gleichzeitig nutzen.
 
 ## 📡 Serielles Protokoll
 
@@ -141,10 +141,11 @@ Audiomixpult/
 ├── docs/
 │   ├── HARDWARE.md         # Pinbelegung, Verkabelung, Fehlersuche
 │   └── EINKAUFSLISTE.md    # Einkaufsliste
-├── mixer-app/              # Experimentelle Electron-App (nicht gepflegt)
-│   ├── main.js, renderer.js, index.html, styles.css
+├── mixer-app/              # Electron-App (Alternative zu deej)
+│   ├── main.js, preload.js, renderer.js, serial.js, volume.js, audio.js, config.js
+│   ├── index.html, styles.css, test/
 │   ├── package.json
-│   ├── assets/             # Icons, NirCmd
+│   ├── assets/             # Icons, Audio-Helfer (PowerShell)
 │   ├── README.md, QUICKSTART.md, INSTALLATION.md
 ├── CLAUDE.md               # Notizen für die Arbeit mit Claude Code
 ├── LICENSE

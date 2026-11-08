@@ -1,125 +1,62 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, shell } = require('electron');
 const path = require('path');
-const { SerialPort } = require('serialport');
-const { ReadlineParser } = require('@serialport/parser-readline');
-const { exec } = require('child_process');
-const util = require('util');
-const fs = require('fs');
-const execPromise = util.promisify(exec);
+const { ConfigStore, SLIDER_COUNT } = require('./config');
+const { SerialLink } = require('./serial');
+const { AudioHelper } = require('./audio');
+const { VolumeMixer } = require('./volume');
 
-// Single Instance Lock - verhindert mehrfache App-Starts
+const DEV = process.argv.includes('--dev');
+const START_HIDDEN = process.argv.includes('--hidden');
+
+// Erlaubte externe Links (der Oberfläche wird nur ein Schlüssel übergeben, nie eine URL)
+const EXTERNAL_LINKS = {
+  github: 'https://github.com/JonasGrafKWR/Audiomixpult',
+  docs: 'https://github.com/JonasGrafKWR/Audiomixpult#readme'
+};
+
+let mainWindow = null;
+let tray = null;
+let isQuitting = false;
+
+// Nur eine Instanz zulassen
 const gotTheLock = app.requestSingleInstanceLock();
-
 if (!gotTheLock) {
   app.quit();
 } else {
-  app.on('second-instance', (event, commandLine, workingDirectory) => {
-    // Wenn zweite Instanz gestartet wird, zeige Hauptfenster
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-    }
+  app.on('second-instance', () => {
+    if (app.isReady()) showWindow();
   });
 }
 
-let mainWindow;
-let tray;
-let port;
-let config = {
-  comPort: null,
-  sliders: [
-    { id: 0, name: 'Kanal 1 (A0)', app: null },
-    { id: 1, name: 'Kanal 2 (A1)', app: null },
-    { id: 2, name: 'Master (A2)', app: 'master' },  // Master in der Mitte
-    { id: 3, name: 'Kanal 4 (A3)', app: null },
-    { id: 4, name: 'Kanal 5 (A4)', app: null }
-  ]
-};
+// ---------------------------------------------------------------------------
+// Bausteine: Konfiguration, Audio, Lautstärke, Serial
+// ---------------------------------------------------------------------------
 
-// Lautstärke-Steuerung (NirCmd-basiert für bessere Performance)
-let lastVolumes = [0, 0, 0, 0, 0];
-let isSettingVolume = false;
+let configStore;
+let audio;
+let mixer;
+const link = new SerialLink();
 
-async function setSystemVolume(volume) {
-  if (isSettingVolume) return;
-  
-  try {
-    isSettingVolume = true;
-    const volumePercent = Math.round((volume / 1023) * 100);
-    const nircmdPath = path.join(__dirname, 'assets', 'nircmd.exe');
-    
-    if (fs.existsSync(nircmdPath)) {
-      await execPromise(`"${nircmdPath}" setsysvolume ${Math.round(volumePercent * 655.35)}`);
-      console.log(`🔊 System-Lautstärke: ${volumePercent}%`);
-    }
-  } catch (err) {
-    console.error('Fehler beim Setzen der Lautstärke:', err.message);
-  } finally {
-    setTimeout(() => { isSettingVolume = false; }, 100);
+function helperPath() {
+  // In der gebauten App liegt das Skript außerhalb des asar-Archivs (asarUnpack)
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'app.asar.unpacked', 'assets', 'audio-helper.ps1')
+    : path.join(__dirname, 'assets', 'audio-helper.ps1');
+}
+
+function applyConfigToMixer() {
+  mixer.setTargets(configStore.get().sliders.map((s) => s.app));
+}
+
+function send(channel, payload) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(channel, payload);
   }
 }
 
-async function setAppVolume(appName, volume) {
-  try {
-    const volumePercent = Math.round((volume / 1023) * 100);
-    const nircmdPath = path.join(__dirname, 'assets', 'nircmd.exe');
-    
-    if (!fs.existsSync(nircmdPath)) return;
-    
-    // NirCmd setappvolume: Setzt Lautstärke für spezifische App
-    // Format: nircmd.exe setappvolume <prozessname.exe> <wert 0.0-1.0>
-    const volumeValue = (volumePercent / 100).toFixed(2);
-    
-    // Prozessnamen zu EXE-Namen konvertieren
-    let exeName = appName.toLowerCase();
-    
-    // Mapping für bekannte Programme
-    const appMapping = {
-      'amazon music': 'amazon music.exe',
-      'msedge': 'msedge.exe',
-      'code': 'code.exe',
-      'anno1800': 'anno1800.exe',
-      'spotify': 'spotify.exe',
-      'discord': 'discord.exe',
-      'chrome': 'chrome.exe',
-      'firefox': 'firefox.exe'
-    };
-    
-    // Verwende Mapping oder füge .exe hinzu
-    if (appMapping[exeName]) {
-      exeName = appMapping[exeName];
-    } else if (!exeName.endsWith('.exe')) {
-      exeName += '.exe';
-    }
-    
-    // Führe NirCmd aus
-    await execPromise(`"${nircmdPath}" setappvolume "${exeName}" ${volumeValue}`);
-    console.log(`🎵 ${appName} (${exeName}): ${volumePercent}%`);
-  } catch (err) {
-    console.error(`Fehler bei App-Lautstärke (${appName}):`, err.message);
-  }
-}
-
-// Lautstärke-Änderungen anwenden (alle Slider aktiv)
-function applyVolumeChanges(values) {
-  config.sliders.forEach((slider, index) => {
-    if (values[index] === undefined) return;
-    
-    const diff = Math.abs(values[index] - lastVolumes[index]);
-    
-    // Bei größerer Änderung (>1% = ~10 Punkte) Lautstärke anpassen
-    if (diff > 10) {
-      if (slider.app === 'master') {
-        // Master-Slider steuert System-Lautstärke
-        setSystemVolume(values[index]);
-      } else if (slider.app && slider.app !== 'master') {
-        // Per-App-Lautstärke für zugewiesene Programme
-        setAppVolume(slider.app, values[index]);
-      }
-      lastVolumes[index] = values[index];
-    }
-  });
-}
+// ---------------------------------------------------------------------------
+// Fenster und Tray
+// ---------------------------------------------------------------------------
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -127,372 +64,179 @@ function createWindow() {
     height: 800,
     minWidth: 800,
     minHeight: 600,
+    show: false,
+    backgroundColor: '#1e1e1e',
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false
-    },
-    // icon: path.join(__dirname, 'assets', 'icon.png'),
-    frame: true,
-    backgroundColor: '#1e1e1e'
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
   });
 
   mainWindow.loadFile('index.html');
+  if (DEV) mainWindow.webContents.openDevTools({ mode: 'detach' });
 
-  // Öffne DevTools automatisch für Debugging
-  mainWindow.webContents.openDevTools();
+  // Keine fremden Fenster, keine Navigation weg von der App
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  mainWindow.webContents.on('will-navigate', (event) => event.preventDefault());
+
+  mainWindow.once('ready-to-show', () => {
+    if (!(START_HIDDEN && tray)) mainWindow.show();
+  });
 
   mainWindow.on('close', (event) => {
-    if (!app.isQuitting) {
+    // Mit Tray läuft die App im Hintergrund weiter, sonst wird sie beendet
+    if (!isQuitting && tray && configStore.get().minimizeToTray) {
       event.preventDefault();
       mainWindow.hide();
     }
   });
+
+  mainWindow.on('closed', () => { mainWindow = null; });
+}
+
+function showWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow();
+    return;
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+function quitApp() {
+  isQuitting = true;
+  app.quit();
 }
 
 function createTray() {
-  // Tray Icon vorübergehend deaktiviert
-  // tray = new Tray(path.join(__dirname, 'assets', 'icon.png'));
-  
-  /* const contextMenu = Menu.buildFromTemplate([
-    {
-      label: 'Audiomixpult Control',
-      enabled: false
-    },
-    { type: 'separator' },
-    {
-      label: 'Open',
-      click: () => {
-        mainWindow.show();
-      }
-    },
-    {
-      label: 'Settings',
-      click: () => {
-        mainWindow.show();
-        mainWindow.webContents.send('show-settings');
-      }
-    },
-    { type: 'separator' },
-    {
-      label: 'Quit',
-      click: () => {
-        app.isQuitting = true;
-        app.quit();
-      }
-    }
-  ]);
+  try {
+    let icon = nativeImage.createFromPath(path.join(__dirname, 'assets', 'icon.png'));
+    if (icon.isEmpty()) return;
+    icon = icon.resize({ width: 16, height: 16 });
+    tray = new Tray(icon);
+  } catch (err) {
+    console.warn(`Tray konnte nicht erstellt werden: ${err.message}`);
+    tray = null;
+    return;
+  }
 
   tray.setToolTip('Audiomixpult Control');
-  tray.setContextMenu(contextMenu);
-  
-  tray.on('double-click', () => {
-    mainWindow.show();
-  }); */
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Audiomixpult Control öffnen', click: () => showWindow() },
+    { type: 'separator' },
+    { label: 'Beenden', click: () => quitApp() }
+  ]));
+  tray.on('click', () => showWindow());
 }
 
-// Autostart Funktionen
-function getAutostartEnabled() {
-  if (process.platform !== 'win32') return false;
-  
-  const startupFolder = path.join(process.env.APPDATA, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup');
-  const shortcutPath = path.join(startupFolder, 'Audiomixpult Control.lnk');
-  
-  return fs.existsSync(shortcutPath);
-}
+// ---------------------------------------------------------------------------
+// IPC
+// ---------------------------------------------------------------------------
 
-async function setAutostart(enabled) {
-  if (process.platform !== 'win32') return { success: false, error: 'Nur Windows unterstützt' };
-  
-  const startupFolder = path.join(process.env.APPDATA, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup');
-  const shortcutPath = path.join(startupFolder, 'Audiomixpult Control.lnk');
-  const exePath = app.getPath('exe');
-  
-  try {
-    if (enabled) {
-      // Erstelle Verknüpfung mit PowerShell
-      const psScript = `
-$WshShell = New-Object -ComObject WScript.Shell
-$Shortcut = $WshShell.CreateShortcut("${shortcutPath.replace(/\\/g, '\\\\')}")
-$Shortcut.TargetPath = "${exePath.replace(/\\/g, '\\\\')}"
-$Shortcut.WorkingDirectory = "${path.dirname(exePath).replace(/\\/g, '\\\\')}"
-$Shortcut.Description = "Audiomixpult Control - Arduino Audio Mixer"
-$Shortcut.Save()
-`;
-      await execPromise(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${psScript.replace(/"/g, '\\"')}"`);
-      return { success: true };
-    } else {
-      // Lösche Verknüpfung
-      if (fs.existsSync(shortcutPath)) {
-        fs.unlinkSync(shortcutPath);
-      }
-      return { success: true };
-    }
-  } catch (error) {
-    return { success: false, error: error.message };
+ipcMain.handle('load-config', () => configStore.get());
+
+ipcMain.handle('get-status', () => link.status);
+
+ipcMain.handle('save-config', (_event, newConfig) => {
+  // Nur Felder übernehmen, die die Oberfläche verwaltet. COM-Port und Auto-Connect setzt
+  // der Hauptprozess selbst (sonst überschreibt ein veralteter Stand der Oberfläche sie).
+  const allowed = {};
+  for (const key of ['sliders', 'profiles', 'currentProfile', 'minimizeToTray']) {
+    if (newConfig && key in newConfig) allowed[key] = newConfig[key];
   }
-}
-
-// IPC Handlers
-
-// Autostart Status abfragen
-ipcMain.handle('get-autostart', async () => {
-  return getAutostartEnabled();
+  const cfg = configStore.update(allowed);
+  applyConfigToMixer();
+  return { success: true, config: cfg };
 });
 
-// Autostart ein/ausschalten
-ipcMain.handle('set-autostart', async (event, enabled) => {
-  return await setAutostart(enabled);
-});
-
-// COM-Ports auflisten
 ipcMain.handle('list-ports', async () => {
   try {
-    const ports = await SerialPort.list();
-    return ports.map(port => ({
-      path: port.path,
-      manufacturer: port.manufacturer,
-      productId: port.productId,
-      vendorId: port.vendorId
-    }));
-  } catch (error) {
-    console.error('Error listing ports:', error);
+    return await SerialLink.listPorts();
+  } catch (err) {
+    console.error('Ports konnten nicht gelesen werden:', err.message);
     return [];
   }
 });
 
-// Arduino verbinden
-ipcMain.handle('connect-arduino', async (event, portPath) => {
-  try {
-    // Alten Port schließen, falls vorhanden
-    if (port && port.isOpen) {
-      port.close();
-    }
-
-    port = new SerialPort({
-      path: portPath,
-      baudRate: 9600
-    });
-
-    const parser = port.pipe(new ReadlineParser({ delimiter: '\n' }));
-
-    parser.on('data', (data) => {
-      // Arduino sendet Daten im Format: "value1|value2|value3|value4|value5"
-      // Die Inversion von Slider 5 passiert bereits im Arduino-Sketch (INVERT[])
-      const values = data.trim().split('|').map(v => parseInt(v));
-
-      mainWindow.webContents.send('slider-values', values);
-      
-      // Wende Lautstärke-Änderungen an
-      applyVolumeChanges(values);
-    });
-
-    port.on('error', (err) => {
-      console.error('Serial port error:', err);
-      mainWindow.webContents.send('connection-error', err.message);
-    });
-
-    config.comPort = portPath;
-    return { success: true };
-  } catch (error) {
-    console.error('Connection error:', error);
-    return { success: false, error: error.message };
+ipcMain.handle('connect-arduino', (_event, portPath) => {
+  if (typeof portPath !== 'string' || !/^COM\d{1,3}$/i.test(portPath)) {
+    return { success: false, error: 'Ungültiger COM-Port' };
   }
-});
-
-// Konfiguration speichern
-ipcMain.handle('save-config', async (event, newConfig) => {
-  config = { ...config, ...newConfig };
-  // Hier könntest du die Config in eine Datei speichern
+  const port = portPath.toUpperCase();
+  configStore.update({ comPort: port, autoConnect: true });
+  link.connect(port);
   return { success: true };
 });
 
-// Konfiguration laden
-ipcMain.handle('load-config', async () => {
-  return config;
-});
-
-// Laufende Prozesse mit Audio abrufen
 ipcMain.handle('get-audio-sessions', async () => {
   try {
-    console.log('🔍 Searching for audio processes...');
-    
-    // Super einfacher PowerShell-Befehl: Nur Prozesse mit Fenstern
-    const psCommand = `Get-Process | Where-Object MainWindowTitle | Select-Object ProcessName, MainWindowTitle, Id | ConvertTo-Json`;
-    
-    console.log('📡 Executing PowerShell command...');
-    const { stdout, stderr } = await execPromise(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${psCommand}"`, {
-      encoding: 'utf8',
-      maxBuffer: 1024 * 1024 * 5,
-      timeout: 10000
-    });
-
-    console.log('📥 PowerShell stdout length:', stdout.length);
-    
-    if (stderr && stderr.trim()) {
-      console.error('⚠️ PowerShell stderr:', stderr);
-    }
-
-    let processes = [];
-    try {
-      const cleanOutput = stdout.trim();
-      if (!cleanOutput || cleanOutput === '' || cleanOutput === 'null') {
-        console.warn('⚠️ Empty PowerShell output - stdout was:', cleanOutput);
-        return getDefaultSessions();
-      }
-      
-      const parsed = JSON.parse(cleanOutput);
-      processes = Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []);
-      console.log(`📦 Raw processes found: ${processes.length}`);
-      
-      // Log erste 5 Prozesse zum Debugging
-      if (processes.length > 0) {
-        console.log('First 5 processes:', processes.slice(0, 5).map(p => p.ProcessName).join(', '));
-      }
-    } catch (e) {
-      console.error('❌ Error parsing process list:', e.message);
-      console.log('Raw stdout length:', stdout.length);
-      console.log('First 500 chars:', stdout.substring(0, 500));
-      return getDefaultSessions();
-    }
-
-    // Bekannte Audio-Programme (auch ohne Fenster)
-    const audioApps = [
-      'spotify', 'discord', 'teamspeak', 'zoom', 'teams', 'skype',
-      'chrome', 'firefox', 'msedge', 'opera', 'brave',
-      'vlc', 'wmplayer', 'groove', 'itunes', 'foobar2000', 'winamp',
-      'amazonmusic', 'amazon', 'music', 'deezer', 'tidal', 'qobuz', 'musicbee',
-      'steam', 'origin', 'uplay', 'epicgameslauncher', 'gog',
-      'obs64', 'obs32', 'streamlabs', 'xsplit'
-    ];
-
-    // System-Prozesse die ignoriert werden sollen
-    const systemProcesses = [
-      'svchost', 'dwm', 'csrss', 'lsass', 'services', 'system', 'registry',
-      'smss', 'wininit', 'winlogon', 'fontdrvhost', 'conhost', 'runtimebroker',
-      'dllhost', 'searchindexer', 'securityhealthservice', 'sgrm', 'sihost',
-      'taskhostw', 'textinputhost', 'wudfhost', 'audiodg', 'dashost', 'msmpseng',
-      'nissrv', 'spoolsv', 'wlanext', 'wmiprvse', 'searchapp', 'startmenuexperiencehost',
-      'shellexperiencehost', 'applicationframehost', 'ctfmon', 'unsecapp', 'electron'
-    ];
-
-    // Filtere und formatiere die Prozesse
-    console.log('🔍 Filtering processes...');
-    console.log('Total processes to filter:', processes.length);
-    
-    const audioSessions = processes
-      .filter(proc => {
-        if (!proc || !proc.ProcessName) {
-          console.log('❌ Skipping null/unnamed process');
-          return false;
-        }
-        const name = proc.ProcessName.toLowerCase();
-        
-        // Überspringe System-Prozesse
-        if (systemProcesses.includes(name)) {
-          console.log(`⏭️ Skipping system process: ${name}`);
-          return false;
-        }
-        
-        // Debug-Log für alle Prozesse mit Fenster
-        if (proc.MainWindowTitle && proc.MainWindowTitle.trim() !== '') {
-          console.log(`🪟 Process with window: ${proc.ProcessName} - "${proc.MainWindowTitle}"`);
-        }
-        
-        // Debug-Log für potenzielle Musik-Apps
-        if (name.includes('amazon') || name.includes('music')) {
-          console.log(`🎵 Found music app: ${proc.ProcessName} (Window: "${proc.MainWindowTitle}")`);
-        }
-        
-        const hasWindow = proc.MainWindowTitle && proc.MainWindowTitle.trim() !== '';
-        const isAudioApp = audioApps.some(app => name.includes(app));
-        
-        if (hasWindow || isAudioApp) {
-          console.log(`✅ Including: ${proc.ProcessName}`);
-          return true;
-        }
-        
-        return false;
-      })
-      .map(proc => {
-        const processName = proc.ProcessName || 'Unknown';
-        const displayName = proc.MainWindowTitle || processName;
-        
-        return {
-          name: processName,
-          displayName: displayName,
-          executable: processName.toLowerCase() + '.exe',
-          path: proc.Path || null,
-          pid: proc.Id,
-          company: null
-        };
-      })
-      // Entferne Duplikate basierend auf ProcessName (nur den ersten behalten)
-      .filter((proc, index, self) => 
-        index === self.findIndex(p => p.name.toLowerCase() === proc.name.toLowerCase())
-      )
-      // Sortiere: Audio-Apps zuerst, dann alphabetisch
-      .sort((a, b) => {
-        const aName = a.name.toLowerCase();
-        const bName = b.name.toLowerCase();
-        const aIsAudio = audioApps.some(app => aName.includes(app));
-        const bIsAudio = audioApps.some(app => bName.includes(app));
-        
-        if (aIsAudio && !bIsAudio) return -1;
-        if (!aIsAudio && bIsAudio) return 1;
-        return aName.localeCompare(bName);
-      });
-
-    // Füge System-Audio hinzu
-    audioSessions.unshift({
-      name: 'System',
-      displayName: 'System Sounds',
-      executable: 'system',
-      path: null,
-      pid: null
-    });
-
-    console.log(`✓ Found ${audioSessions.length} audio sessions:`, audioSessions.map(s => s.name).join(', '));
-    return audioSessions;
-    
-  } catch (error) {
-    console.error('Error getting audio sessions:', error);
-    return getDefaultSessions();
+    const names = await audio.list();
+    return names.map((exe) => ({ executable: exe, displayName: exe.replace(/\.exe$/i, '') }));
+  } catch (err) {
+    console.warn(`Programmliste nicht verfügbar: ${err.message}`);
+    return [];
   }
 });
 
-// Fallback für Fehler
-function getDefaultSessions() {
-  return [
-    {
-      name: 'System',
-      displayName: 'System Sounds',
-      executable: 'system',
-      path: null,
-      pid: null
-    }
-  ];
+ipcMain.handle('get-autostart', () => app.getLoginItemSettings().openAtLogin);
+
+ipcMain.handle('set-autostart', (_event, enabled) => {
+  if (process.platform !== 'win32') return { success: false, error: 'Nur unter Windows unterstützt' };
+  if (!app.isPackaged) return { success: false, error: 'Autostart ist nur in der gebauten App möglich' };
+  try {
+    app.setLoginItemSettings({ openAtLogin: !!enabled, args: ['--hidden'] });
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('open-external', (_event, key) => {
+  const url = EXTERNAL_LINKS[key];
+  if (url) shell.openExternal(url);
+});
+
+// ---------------------------------------------------------------------------
+// Start und Ende
+// ---------------------------------------------------------------------------
+
+if (gotTheLock) {
+  app.whenReady().then(() => {
+    configStore = new ConfigStore(path.join(app.getPath('userData'), 'config.json'));
+    configStore.load();
+
+    audio = new AudioHelper(helperPath(), { log: (m) => console.log(m), warn: (m) => console.warn(m) });
+    audio.start();
+    mixer = new VolumeMixer({ apply: (target, scalar) => audio.set(target, scalar), warn: (m) => console.warn(m) });
+    applyConfigToMixer();
+
+    link.on('values', (values) => {
+      values.slice(0, SLIDER_COUNT).forEach((value, i) => mixer.update(i, value));
+      send('slider-values', values);
+    });
+    link.on('status', (status) => send('connection-status', status));
+
+    createTray();
+    createWindow();
+
+    const cfg = configStore.get();
+    if (cfg.autoConnect && cfg.comPort) link.connect(cfg.comPort);
+
+    app.on('activate', () => showWindow());
+  });
 }
 
-app.whenReady().then(() => {
-  createWindow();
-  // createTray(); // Vorübergehend deaktiviert
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
-  });
-});
-
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  // Mit Tray bleibt die App im Hintergrund aktiv
+  if (!tray) quitApp();
 });
 
 app.on('before-quit', () => {
-  app.isQuitting = true;
-  if (port && port.isOpen) {
-    port.close();
-  }
+  isQuitting = true;
+  if (mixer) mixer.stop();
+  link.disconnect();
+  if (audio) audio.stop();
 });

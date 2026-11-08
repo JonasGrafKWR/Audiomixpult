@@ -1,6 +1,6 @@
-# 🎚️ Audiomixpult Control - Installation (experimentell)
+# 🎚️ Audiomixpult Control - Installation
 
-> ⚠️ Die App ist ein nicht gepflegter Prototyp. Für den Alltag deej verwenden, siehe [Haupt-README](../README.md). Bekannte Einschränkungen stehen in [README.md](README.md).
+> deej ist weiterhin die Empfehlung für den Alltag, siehe [Haupt-README](../README.md). Details und Einschränkungen der App stehen in [README.md](README.md).
 
 ## Windows-Installer erstellen
 
@@ -16,7 +16,7 @@ Das erzeugt zwei Varianten im lokalen Ordner `dist/` (der Ordner ist nicht im Re
 1. **NSIS-Installer** (`Audiomixpult Control Setup 1.0.0.exe`) mit Startmenü-Eintrag, Desktop-Verknüpfung und Deinstallation
 2. **Portable Version** (`Audiomixpult Control 1.0.0.exe`) ohne Installation
 
-Die Installer sind **nicht code-signiert**. Windows kann beim Start eine Warnung zeigen.
+Die Installer sind **nicht code-signiert**, Windows kann beim Start eine Warnung zeigen. Das Bauen und die gebaute App sind **nicht getestet**. Besonders zu prüfen: Der Audio-Helfer `assets/audio-helper.ps1` muss im Paket entpackt vorliegen (`asarUnpack` in der `package.json`), sonst kann die App die Lautstärke nicht setzen.
 
 ## Nach der Installation
 
@@ -25,27 +25,22 @@ Die Installer sind **nicht code-signiert**. Windows kann beim Start eine Warnung
 3. App starten, **⚙️ Einstellungen** öffnen, COM-Port wählen, **Verbinden**.
 4. Programme aus der Seitenleiste per Drag & Drop auf Regler ziehen.
 
-COM-Port und Zuordnungen werden **nicht gespeichert** und müssen bei jedem Start neu eingestellt werden.
+COM-Port und Zuordnungen werden gespeichert (`%APPDATA%\audiomixpult-control\config.json`), die App verbindet beim nächsten Start selbst.
 
 ## Autostart
 
-In den Einstellungen "Mit Windows starten" aktivieren. Die App legt dazu eine Verknüpfung an:
-
-```
-%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\Audiomixpult Control.lnk
-```
-
-Das ist nur in der gebauten App sinnvoll. Im Entwicklungsmodus zeigt die Verknüpfung auf `electron.exe`.
+In den Einstellungen "Mit Windows starten" aktivieren. Die App trägt sich dazu als Autostart-Programm von Windows ein (Einstellungen → Apps → Autostart) und startet dann ausgeblendet im Tray. Das geht nur in der gebauten App, nicht beim Start mit `npm start`.
 
 ## Deinstallation
 
-Windows-Einstellungen → Apps → Installierte Apps → "Audiomixpult Control" → Deinstallieren. Die Autostart-Verknüpfung (siehe oben) gegebenenfalls von Hand löschen.
+Windows-Einstellungen → Apps → Installierte Apps → "Audiomixpult Control" → Deinstallieren.
 
 ## Troubleshooting
 
 - **Arduino nicht erkannt:** CH340-Treiber prüfen, anderes USB-Kabel oder anderen Port probieren.
-- **Lautstärke ändert sich nicht:** Ein Regler ohne Zuordnung bewirkt nichts. Programme müssen Ton ausgeben.
-- **Fenster geschlossen, App nicht mehr erreichbar:** Das Schließen versteckt das Fenster nur (der Tray ist deaktiviert). Die App im Task-Manager beenden und neu starten.
+- **"Port belegt":** Läuft deej, der Serial Monitor oder die Arduino IDE? Beenden, die App versucht es alle 3 Sekunden erneut.
+- **Lautstärke ändert sich nicht:** Das Programm muss schon Ton ausgegeben haben, und der Regler braucht eine Zuordnung.
+- **Fenster geschlossen:** Die App läuft im Hintergrund weiter. Tray-Symbol anklicken oder die App ein zweites Mal starten.
 
 ## Systemanforderungen
 

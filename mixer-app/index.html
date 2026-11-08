@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:">
     <title>Audiomixpult Control</title>
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -38,6 +39,10 @@
                     <div class="program-item" draggable="true" data-app="master" data-type="system">
                         <span class="program-icon">🔊</span>
                         <span class="program-name">Master Volume</span>
+                    </div>
+                    <div class="program-item" draggable="true" data-app="system" data-type="system">
+                        <span class="program-icon">🔔</span>
+                        <span class="program-name">Systemklänge</span>
                     </div>
                     <div class="program-item" draggable="true" data-app="mic" data-type="system">
                         <span class="program-icon">🎤</span>
@@ -222,7 +227,7 @@
                                 <input type="checkbox" id="autostartCheckbox">
                                 <span>Mit Windows starten</span>
                             </label>
-                            <p class="help-text">App wird automatisch beim Windows-Start geöffnet</p>
+                            <p class="help-text" id="autostartHelp">App wird automatisch beim Windows-Start geöffnet (nur in der gebauten App)</p>
                         </div>
                         <div class="form-group">
                             <label class="checkbox-label">
@@ -244,7 +249,7 @@
                                 <option value="work">Office</option>
                             </select>
                             <button class="btn btn-primary" id="saveProfileBtn">Profil speichern</button>
-                            <button class="btn btn-secondary" id="newProfileBtn">Neues Profil</button>
+                            <p class="help-text" id="profileHint">Beim Wechsel wird die gespeicherte Zuordnung geladen.</p>
                         </div>
                     </div>
 
