@@ -40,3 +40,6 @@ Thumbs.db
 build/
 dist/
 target/
+
+# Arduino IDE 2 (Hilfsordner)
+.theia/
