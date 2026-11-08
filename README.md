@@ -98,16 +98,19 @@ Download: [https://www.arduino.cc/en/software](https://www.arduino.cc/en/softwar
 ```yaml
 slider_mapping:
   0: master                    # Regler 1: Systemlautstärke
-  1: discord                   # Regler 2: Discord
-  2: spotify                   # Regler 3: Spotify
-  3: chrome                    # Regler 4: Browser
-  4: deej.unmapped            # Regler 5: Nicht zugeordnet
+  1: discord.exe               # Regler 2: Discord
+  2: spotify.exe               # Regler 3: Spotify
+  3: chrome.exe                # Regler 4: Browser
+  4: deej.unmapped             # Regler 5: Nicht zugeordnet
 
 # COM-Port des Arduino (im Gerätemanager prüfen)
 com_port: COM3
 
-# Keine Änderung nötig
-process_refresh_frequency: 5
+# Muss zum Sketch passen (BAUD_RATE = 9600)
+baud_rate: 9600
+
+# low, default oder high
+noise_reduction: default
 ```
 
 **Tipp:** Du kannst auch Geräte wie Mikrofon oder Lautsprecher zuordnen!
@@ -175,7 +178,7 @@ Audiomixpult/
 
 ### Regler sind zittrig/springen
 - Normale Softwareversion nutzt bereits Glättung
-- Falls Probleme: `NOISE_THRESHOLD` in `.ino` erhöhen
+- Falls Probleme: `NUM_READINGS` oder `SNAP_MARGIN` in `.ino` erhöhen oder `noise_reduction: high` in der `config.yaml` setzen
 
 ### DEEJ findet keine Anwendungen
 - Anwendung muss Audio abspielen
@@ -192,11 +195,14 @@ const int NUM_SLIDERS = 5;  // Auf gewünschte Anzahl ändern
 const int ANALOG_PINS[NUM_SLIDERS] = {A0, A1, A2, A3, A4};  // Pins anpassen
 ```
 
-### Einfache Version ohne Glättung
+### Glättung anpassen
 
-Für minimale Latenz (aber mit mehr Rauschen):
-1. `loop()` Funktion auskommentieren
-2. `loop_simple()` in `loop()` umbenennen
+`NUM_READINGS = 1` in `audiomixer.ino` schaltet die Glättung ab (minimale Latenz, mehr Rauschen).
+
+### Einzelnen Regler umkehren
+
+Im Array `INVERT[]` in `audiomixer.ino` den Eintrag des Reglers auf `true` setzen (Regler 5 ist bereits umgekehrt).
+Alternativ am Poti die Leitungen 5V und GND tauschen.
 
 ## 🤝 Beitragen
 
