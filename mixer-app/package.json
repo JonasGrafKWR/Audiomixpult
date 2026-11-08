@@ -8,8 +8,8 @@
     "dev": "electron . --dev",
     "test": "node --test",
     "build": "electron-builder",
-    "build:win": "electron-builder --win --x64 --config.win.sign=null",
-    "build:portable": "electron-builder --win portable --x64 --config.win.sign=null",
+    "build:win": "electron-builder --win --x64",
+    "build:portable": "electron-builder --win portable --x64",
     "pack": "electron-builder --dir"
   },
   "keywords": [
@@ -32,6 +32,7 @@
   "build": {
     "appId": "com.jonasgrafkwr.audiomixpult",
     "productName": "Audiomixpult Control",
+    "npmRebuild": false,
     "copyright": "Copyright © 2025 JonasGrafKWR",
     "win": {
       "target": [
@@ -61,8 +62,6 @@
       "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
       "shortcutName": "Audiomixpult Control",
-      "installerIcon": "assets/icon.png",
-      "uninstallerIcon": "assets/icon.png",
       "license": "../LICENSE",
       "runAfterFinish": true,
       "menuCategory": true,
@@ -70,7 +69,7 @@
     },
     "directories": {
       "output": "dist",
-      "buildResources": "assets"
+      "buildResources": "build"
     },
     "asarUnpack": [
       "assets/audio-helper.ps1"
@@ -80,7 +79,9 @@
       "!**/*.ts",
       "!*.md",
       "!.git",
-      "!test/**"
+      "!test/**",
+      "!assets/nircmd*.exe",
+      "!assets/NirCmd.chm"
     ]
   }
 }

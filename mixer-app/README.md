@@ -26,7 +26,7 @@ Eine Desktop-App, die die Werte des Arduino-Mixers über `serialport` liest und 
 
 - Ein Programm erscheint erst, wenn es schon Ton ausgegeben hat (wie bei deej).
 - Kein `deej.current`, `deej.unmapped` oder Gerätename als Ziel.
-- Die Installer (`npm run build:win`) sind nicht code-signiert. Der Autostart und das Entpacken des Audio-Helfers (`asarUnpack`) sind **nur in der Entwicklung getestet, nicht in der gebauten App**.
+- Der Installer (`npm run build:win`) ist **nicht code-signiert**: Windows zeigt beim Start "Unbekannter Herausgeber" (Weitere Informationen → Trotzdem ausführen). Die gebaute App (`dist/win-unpacked`) wurde geprüft: Audio-Helfer, serielle Bibliothek und Fenster funktionieren. Der Autostart-Schalter und die Installation selbst sind nicht auf jedem System getestet.
 - Die App und deej können den COM-Port **nicht gleichzeitig** öffnen. Vor dem Start der App deej beenden (und umgekehrt). Ist der Port belegt, zeigt die App "Port belegt" und versucht es alle 3 Sekunden erneut.
 
 ## Zusammenspiel mit dem Sketch

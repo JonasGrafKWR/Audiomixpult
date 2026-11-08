@@ -16,7 +16,11 @@ Das erzeugt zwei Varianten im lokalen Ordner `dist/` (der Ordner ist nicht im Re
 1. **NSIS-Installer** (`Audiomixpult Control Setup 1.0.0.exe`) mit Startmenü-Eintrag, Desktop-Verknüpfung und Deinstallation
 2. **Portable Version** (`Audiomixpult Control 1.0.0.exe`) ohne Installation
 
-Die Installer sind **nicht code-signiert**, Windows kann beim Start eine Warnung zeigen. Das Bauen und die gebaute App sind **nicht getestet**. Besonders zu prüfen: Der Audio-Helfer `assets/audio-helper.ps1` muss im Paket entpackt vorliegen (`asarUnpack` in der `package.json`), sonst kann die App die Lautstärke nicht setzen.
+Der Installer ist **nicht code-signiert**. Windows zeigt beim Start "Windows hat Ihren PC geschützt" bzw. "Unbekannter Herausgeber": auf **Weitere Informationen → Trotzdem ausführen** klicken. Er installiert pro Benutzer, Administratorrechte sind nicht nötig.
+
+Geprüft wurde die gebaute App unter `dist/win-unpacked`: Der Audio-Helfer liegt entpackt im Paket (`asarUnpack`), die serielle Bibliothek lädt, das Fenster öffnet sich.
+
+**Bekanntes Problem beim Bauen unter Windows:** Ohne Entwicklermodus oder Administratorrechte kann `electron-builder` beim Entpacken seines Werkzeugs `winCodeSign` zwei macOS-Dateien (symbolische Links) nicht anlegen und der Bau bricht ab. Abhilfe: In Windows den **Entwicklermodus** einschalten, oder den Ordner `winCodeSign-2.6.0` im Cache (`%LOCALAPPDATA%\electron-builder\Cache\winCodeSign`) aus einem bereits entpackten Stand kopieren. Der Bau braucht beim ersten Mal Internet (Werkzeuge von GitHub).
 
 ## Nach der Installation
 
