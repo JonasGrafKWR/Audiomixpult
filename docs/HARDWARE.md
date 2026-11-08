@@ -17,7 +17,7 @@
 ### Nicht verwendete Pins
 
 Folgende Pins sind frei und können für Erweiterungen genutzt werden:
-- **A5, A6, A7**: Weitere analoge Eingänge (für mehr Regler)
+- **A5, A6, A7**: Weitere analoge Eingänge (für mehr Regler). A6 und A7 sind reine Analogeingänge.
 - **D2-D13**: Digitale Pins (für LEDs, Displays, Buttons)
 - **TX/RX (D0/D1)**: Serielle Kommunikation (für Debugging)
 
@@ -144,7 +144,8 @@ Für ein kompaktes Gehäuse:
 ### 🎮 Mehr Regler hinzufügen
 - Arduino Nano hat A5-A7 frei
 - Bis zu 8 Regler möglich (A0-A7)
-- Code anpassen: `NUM_SLIDERS` erhöhen
+- Code anpassen: `NUM_SLIDERS` erhöhen, den Pin in `ANALOG_PINS[]` eintragen und `INVERT[]` um einen Eintrag erweitern
+- In der deej-Config einen weiteren Eintrag unter `slider_mapping` ergänzen
 
 ### 💡 LEDs hinzufügen
 - Digital Pins D2-D13 nutzen
@@ -153,8 +154,8 @@ Für ein kompaktes Gehäuse:
 
 ### 🖥️ OLED-Display integrieren
 - Zeigt zugeordnete Apps an
-- I2C-Display (0.96" OLED)
-- Pins: SDA=A4, SCL=A5 (mit I2C-Multiplexer)
+- **Achtung:** Beim Nano liegt I2C fest auf **A4 (SDA)** und **A5 (SCL)**. A4 wird aber von Regler 5 belegt, ein I2C-Display kollidiert also mit dem fünften Regler.
+- Lösungen: ein **SPI-Display** (an D-Pins) verwenden, oder Regler 5 auf **A6/A7** verlegen (`ANALOG_PINS[]` im Sketch anpassen) und das I2C-Display an A4/A5 betreiben. Ein "Multiplexer" ändert an den festen I2C-Pins nichts.
 
 ### 🎛️ Rotary Encoder
 - Für Mikrofonverstärkung
@@ -181,26 +182,35 @@ Für ein kompaktes Gehäuse:
 - Zwischen VCC und GND: ~10kΩ
 - OTA sollte sich ändern beim Verstellen
 
+**Regler zeigt im Serial Monitor immer `1023` (oder immer `0`)**:
+- Immer `1023` heißt: Der Analogeingang sieht ständig 5 V. Typische Ursachen: GND-Leitung dieses Potis unterbrochen (lose Lötstelle, Kabelbruch), Signalleitung am 5V-Pin des Potis statt am Schleifer (OTA), Lötbrücke zu 5V.
+- Immer `0` heißt: Eingang liegt auf GND (5V-Leitung unterbrochen oder Schleifer an GND).
+- Eingrenzen: Mit einem Jumperkabel den Analogpin am Nano kurz mit GND verbinden, der Wert im Monitor muss auf `0` fallen. Mit dem Multimeter (Gleichspannung, **DC**!) die Spannung am Analogpin gegen GND messen: sie muss sich beim Verschieben zwischen 0 V und 5 V ändern.
+- Durchgang (Nano abgezogen): Zwischen benachbarten Analogpins darf es nicht piepen (Lötbrücke).
+
 ### Problem: Alle Regler zappeln/springen
 
 **Ursachen**:
-- Schlechte Stromversorgung (USB-Hub nutzen)
+- Schlechte Stromversorgung (USB-Hub oder Frontbuchse vermeiden)
 - Zu lange Kabel (Störungen einfangen)
 - Defekte Potis (selten)
 
 **Lösungen**:
 - Direkt an PC-USB anschließen
 - Abgeschirmte Kabel verwenden
-- Software-Glättung aktivieren (schon im Code!)
+- Software-Glättung im Sketch (`NUM_READINGS`) erhöhen, in deej `noise_reduction: high` setzen
 
 ### Problem: Werte verkehrt herum
 
 **Lösung 1**: VCC und GND am Poti tauschen
 
-**Lösung 2**: In der Software invertieren
+**Lösung 2**: Im Sketch invertieren. Dafür gibt es das Array `INVERT[]` in `audiomixer/audiomixer.ino`. Den Eintrag des betroffenen Reglers auf `true` setzen:
 ```cpp
-int value = 1023 - analogRead(ANALOG_PINS[i]);
+const bool INVERT[NUM_SLIDERS] = {true, true, true, true, true};
 ```
+(Bei der aktuellen Verdrahtung sind alle fünf Regler umgekehrt.)
+
+**Lösung 3**: Alle Regler auf einmal umkehren geht auch in der deej-Config mit `invert_sliders: true`.
 
 ## Wartung & Pflege
 
