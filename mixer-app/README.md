@@ -1,43 +1,37 @@
-# Audiomixpult Control - Electron-App (experimentell)
+# Audiomixpult Control - Electron-App
 
-> ⚠️ **Experimentell und nicht gepflegt.** Für den Alltag wird das Original-**deej** empfohlen (siehe [Haupt-README](../README.md)). Diese App ist ein Prototyp mit bekannten Fehlern (siehe unten).
+Eine Desktop-App, die die Werte des Arduino-Mixers über `serialport` liest und die Windows-Lautstärke über einen dauerhaft laufenden PowerShell-Helfer (WASAPI) setzt. Alternative zum Original-**deej** (siehe [Haupt-README](../README.md)).
 
-Eine Desktop-App, die die Werte des Arduino-Mixers über `serialport` liest und die Windows-Lautstärke mit **NirCmd** setzt.
+> **Status:** Läuft, ist aber weniger erprobt als deej. deej bleibt die Empfehlung für den Alltag. Die App kennt weniger Ziele (kein `deej.current`, keine Gerätenamen).
 
 ## Was die App kann
 
 - Die fünf Reglerwerte live anzeigen
-- COM-Ports auflisten und mit dem Arduino verbinden
-- Laufende Programme (mit Fenster) in einer Liste anzeigen und per Drag & Drop einem Regler zuordnen
-- Master-Lautstärke (`nircmd setsysvolume`) und Lautstärke einzelner Programme (`nircmd setappvolume`) setzen
-- Autostart per Verknüpfung im Windows-Autostart-Ordner (nur sinnvoll in der gebauten App)
-- Nur eine Instanz gleichzeitig
+- Verbindung zum Arduino über einen COM-Port, **verbindet beim Start automatisch neu** und stellt die Verbindung bei Abbruch wieder her
+- Programme mit Audio-Session in einer Liste anzeigen und per Drag & Drop einem Regler zuordnen
+- Ziele: `Master`, `Mikrofon`, `Systemklänge` oder ein Programm (z. B. `spotify.exe`)
+- **Konfiguration wird gespeichert** (COM-Port, Zuordnungen, Namen, Profile)
+- Vier Profile (Standard, Gaming, Streaming, Office): "Profil speichern" legt die aktuelle Zuordnung ab, beim Wechsel wird sie geladen
+- Tray-Symbol: Schließen des Fensters blendet es aus, die App läuft weiter (abschaltbar unter "In Taskleiste minimieren")
+- Autostart über die Einstellungen (nur in der gebauten App)
+- Nur eine Instanz gleichzeitig. Ein zweiter Start zeigt das Fenster wieder.
 
-## Was die App (noch) nicht kann
+## So setzt die App die Lautstärke
 
-Folgendes wurde früher beschrieben, ist aber **nicht umgesetzt**:
+- Ein einziger PowerShell-Prozess (`assets/audio-helper.ps1`) spricht mit der Windows-Audio-Schnittstelle. Er bekommt Befehle als JSON-Zeilen und wird bei einem Absturz neu gestartet. NirCmd wird nicht mehr benötigt.
+- Reglerwerte werden gebündelt (alle ca. 30 ms). **Der letzte Wert geht nie verloren.** Schlägt ein Befehl fehl oder läuft das Zielprogramm noch nicht, wird der Wert später erneut gesetzt.
+- Werte nahe an den Anschlägen rasten auf 0 % bzw. 100 % ein, kleines Zittern (unter ca. 0,6 %) wird ignoriert.
 
-- Profile (Gaming, Office ...) speichern. Die Oberfläche hat eine Überschrift, aber keine Funktion.
-- System Tray. Der Code ist auskommentiert. Das Schließen des Fensters versteckt es nur, ohne Tray lässt es sich nicht wieder öffnen.
-- Die Konfiguration (COM-Port, Zuordnungen) dauerhaft speichern. Sie liegt nur im Arbeitsspeicher und ist beim nächsten Start weg.
-- `mic`, `system`, `deej.unmapped` oder Gerätenamen als Ziel (wie in deej).
-- Auto-Connect und Reconnect.
+## Bekannte Einschränkungen
 
-## Bekannte Fehler
-
-- **Verlorene Reglerposition:** `setSystemVolume()` verwirft Werte, solange der Lock gesetzt ist, `applyVolumeChanges()` merkt sich den Wert aber trotzdem. Die letzte Position kann so verloren gehen.
-- **Ein Prozess pro Änderung:** Jede Lautstärkeänderung startet einen neuen `nircmd`-Prozess. Mehrere laufen ungeordnet und können einen veralteten Wert hinterlassen.
-- **0 % und 100 % nicht sicher erreichbar:** Änderungen unter 10 Punkten werden ignoriert.
-- **Sicherheit:** Der Renderer läuft mit `nodeIntegration: true` und `contextIsolation: false`. Fenstertitel laufen per `innerHTML` in die Oberfläche. Ein Browser-Tab mit HTML im Titel könnte so Code mit Node-Rechten ausführen.
-- **DevTools** öffnen immer automatisch.
-- Das Zuordnen von "System Sounds" setzt eine App namens `system.exe`, das bewirkt nichts.
-- Die Abhängigkeit `loudness` in der `package.json` wird nicht benutzt.
+- Ein Programm erscheint erst, wenn es schon Ton ausgegeben hat (wie bei deej).
+- Kein `deej.current`, `deej.unmapped` oder Gerätename als Ziel.
+- Die Installer (`npm run build:win`) sind nicht code-signiert. Der Autostart und das Entpacken des Audio-Helfers (`asarUnpack`) sind **nur in der Entwicklung getestet, nicht in der gebauten App**.
+- Die App und deej können den COM-Port **nicht gleichzeitig** öffnen. Vor dem Start der App deej beenden (und umgekehrt). Ist der Port belegt, zeigt die App "Port belegt" und versucht es alle 3 Sekunden erneut.
 
 ## Zusammenspiel mit dem Sketch
 
-Der Sketch (`audiomixer/audiomixer.ino`) sendet Zeilen `w1|w2|w3|w4|w5\r\n` mit Werten von 0 bis 1023 und kehrt Regler selbst um (`INVERT[]`). Die App invertiert nichts mehr.
-
-Die App und deej können den COM-Port **nicht gleichzeitig** öffnen. Vor dem Start der App deej beenden (und umgekehrt).
+Der Sketch (`audiomixer/audiomixer.ino`) sendet Zeilen `w1|w2|w3|w4|w5\r\n` mit Werten von 0 bis 1023 und kehrt Regler selbst um (`INVERT[]`). Die App invertiert nichts.
 
 ## Starten (Entwicklung)
 
@@ -49,6 +43,8 @@ npm install
 npm start
 ```
 
+`npm run dev` startet zusätzlich die DevTools. Tests: `npm test`.
+
 ## Windows-Installer bauen (optional)
 
 ```powershell
@@ -57,24 +53,35 @@ npm run build:win
 
 Das erzeugt Installer und Portable-Version im lokalen Ordner `dist/` (nicht im Repo).
 
+## Konfiguration
+
+Die Konfiguration liegt unter `%APPDATA%\audiomixpult-control\config.json`. Eine beschädigte Datei wird als `config.json.defekt` gesichert und durch Standardwerte ersetzt.
+
 ## Projektstruktur
 
 ```
 mixer-app/
-├── main.js          # Electron Main Process, Serial, NirCmd
-├── renderer.js      # Oberfläche, Drag & Drop
-├── index.html       # Layout
-├── styles.css       # Styling
+├── main.js          # Electron Main Process: Fenster, Tray, IPC, Zusammenspiel
+├── preload.js       # Sichere Brücke zur Oberfläche (contextBridge)
+├── renderer.js      # Oberfläche, Drag & Drop (ohne Node-Zugriff, ohne innerHTML)
+├── serial.js        # Serielle Verbindung mit Auto-Reconnect, Zeilenparser
+├── volume.js        # Reglerwerte -> Lautstärke (Bündeln, Einrasten, Wiederholen)
+├── audio.js         # Anbindung an den dauerhaften PowerShell-Helfer
+├── config.js        # Konfiguration laden/speichern/prüfen
+├── index.html, styles.css
+├── test/            # Unit-Tests (npm test)
 ├── package.json
-└── assets/          # Icons, nircmd.exe, nircmdc.exe, NirCmd.chm, autostart.vbs
+└── assets/          # Icons, audio-helper.ps1 (nircmd.exe liegt noch im Repo, wird nicht mehr benutzt)
 ```
 
-Hinweis zu `assets/nircmd.exe`: NirCmd ist ein Freeware-Programm von NirSoft. Die Dateien liegen bereits im Repo. Die Lizenzbedingungen für die Weitergabe sind nicht geprüft.
+## Sicherheit
+
+Die Oberfläche läuft mit `contextIsolation`, `sandbox` und ohne `nodeIntegration`. Sie darf nur die Kanäle aus `preload.js` benutzen. Programmnamen und Reglernamen werden nur als Text eingefügt, externe Links öffnet der Hauptprozess über eine feste Liste.
 
 ## IPC-Kanäle
 
-- Main → Renderer: `slider-values`, `connection-error`
-- Renderer → Main: `list-ports`, `connect-arduino`, `save-config`, `load-config`, `get-audio-sessions`, `get-autostart`, `set-autostart`
+- Main → Renderer: `slider-values`, `connection-status`
+- Renderer → Main: `load-config`, `save-config`, `get-status`, `list-ports`, `connect-arduino`, `get-audio-sessions`, `get-autostart`, `set-autostart`, `open-external`
 
 ## Lizenz
 
