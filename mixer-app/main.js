@@ -277,16 +277,9 @@ ipcMain.handle('connect-arduino', async (event, portPath) => {
 
     parser.on('data', (data) => {
       // Arduino sendet Daten im Format: "value1|value2|value3|value4|value5"
-      const rawValues = data.trim().split('|').map(v => parseInt(v));
-      
-      // Invertiere Slider 5 (Index 4) - er ist falsch herum verkabelt
-      const values = rawValues.map((val, idx) => {
-        if (idx === 4) {
-          return 1023 - val;  // Slider 5 umkehren
-        }
-        return val;
-      });
-      
+      // Die Inversion von Slider 5 passiert bereits im Arduino-Sketch (INVERT[])
+      const values = data.trim().split('|').map(v => parseInt(v));
+
       mainWindow.webContents.send('slider-values', values);
       
       // Wende Lautstärke-Änderungen an
