@@ -28,7 +28,7 @@ baud_rate: 9600
 
 # Alle Regler umkehren (true = oben ist 0 %, unten ist 100 %)
 # Gilt für ALLE Regler. Einzelne Regler werden im Arduino-Sketch über das
-# Array INVERT[] umgekehrt (Regler 5 ist dort bereits umgekehrt).
+# Array INVERT[] umgekehrt (dort sind aktuell alle fünf Regler umgekehrt).
 invert_sliders: false
 
 # Noise Reduction - ignoriert kleine Wertänderungen

@@ -201,7 +201,7 @@ const int ANALOG_PINS[NUM_SLIDERS] = {A0, A1, A2, A3, A4};  // Pins anpassen
 
 ### Einzelnen Regler umkehren
 
-Im Array `INVERT[]` in `audiomixer.ino` den Eintrag des Reglers auf `true` setzen (Regler 5 ist bereits umgekehrt).
+Im Array `INVERT[]` in `audiomixer.ino` den Eintrag des Reglers auf `true` setzen (bei der aktuellen Verdrahtung sind alle fünf Regler umgekehrt).
 Alternativ am Poti die Leitungen 5V und GND tauschen.
 
 ## 🤝 Beitragen

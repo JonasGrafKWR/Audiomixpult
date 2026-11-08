@@ -27,9 +27,10 @@ const int NUM_SLIDERS = 5;
 const int ANALOG_PINS[NUM_SLIDERS] = {A0, A1, A2, A3, A4};
 
 // Regler umkehren (true = Wert wird als 1023 - Wert gesendet).
-// Regler 5 ist "falsch herum" verdrahtet. Alternative zum Umkehren hier:
-// am Poti 5 die Leitungen 5V und GND tauschen und den Eintrag auf false setzen.
-const bool INVERT[NUM_SLIDERS] = {false, false, false, false, true};
+// Bei der aktuellen Verdrahtung laufen alle fünf Regler "falsch herum".
+// Alternative zum Umkehren hier: am Poti die Leitungen 5V und GND tauschen
+// und den Eintrag auf false setzen.
+const bool INVERT[NUM_SLIDERS] = {true, true, true, true, true};
 
 // Baudrate (muss mit baud_rate in der deej-config.yaml übereinstimmen)
 const long BAUD_RATE = 9600;
