@@ -6,6 +6,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
+    "test": "node --test",
     "build": "electron-builder",
     "build:win": "electron-builder --win --x64 --config.win.sign=null",
     "build:portable": "electron-builder --win portable --x64 --config.win.sign=null",
@@ -26,7 +27,6 @@
   },
   "dependencies": {
     "@serialport/parser-readline": "^12.0.0",
-    "loudness": "^0.4.2",
     "serialport": "^12.0.0"
   },
   "build": {
@@ -37,11 +37,15 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "assets/icon.png",
@@ -68,11 +72,15 @@
       "output": "dist",
       "buildResources": "assets"
     },
+    "asarUnpack": [
+      "assets/audio-helper.ps1"
+    ],
     "files": [
       "**/*",
       "!**/*.ts",
       "!*.md",
-      "!.git"
+      "!.git",
+      "!test/**"
     ]
   }
 }

@@ -1,394 +1,337 @@
-const { ipcRenderer } = require('electron');
+// Oberfläche. Läuft ohne Node-Zugriff, Kommunikation nur über window.api (preload.js).
+// Alle Texte (auch Programm- und Gerätenamen) werden per textContent gesetzt, nie als HTML.
 
-// State
-let config = {
-    sliders: []
+const SLIDER_COUNT = 5;
+const PROFILE_NAMES = ['default', 'gaming', 'streaming', 'work'];
+
+const SYSTEM_TARGETS = {
+  master: { label: 'Master', icon: '🔊' },
+  mic: { label: 'Mikrofon', icon: '🎤' },
+  system: { label: 'Systemklänge', icon: '🔔' }
 };
-let connectedPort = null;
-let autoRefreshInterval = null;
 
-// DOM Elements
-const connectionStatus = document.getElementById('connectionStatus');
-const settingsBtn = document.getElementById('settingsBtn');
-const settingsModal = document.getElementById('settingsModal');
-const closeSettings = document.getElementById('closeSettings');
-const cancelSettings = document.getElementById('cancelSettings');
-const refreshApps = document.getElementById('refreshApps');
-const comPortSelect = document.getElementById('comPortSelect');
-const connectBtn = document.getElementById('connectBtn');
-const refreshPortsBtn = document.getElementById('refreshPortsBtn');
-const runningPrograms = document.getElementById('runningPrograms');
+let config = null;
+let status = { state: 'disconnected', port: null, message: '' };
 
-// Initialize
-document.addEventListener('DOMContentLoaded', () => {
-    loadConfig();
-    setupDragAndDrop();
-    setupEventListeners();
-    refreshPorts();
-    refreshAudioSessions();
-    
-    // Auto-refresh alle 5 Sekunden
-    autoRefreshInterval = setInterval(refreshAudioSessions, 5000);
-});
+const $ = (id) => document.getElementById(id);
+const channels = () => document.querySelectorAll('.mixer-channel');
 
-// Load Configuration
-async function loadConfig() {
-    config = await ipcRenderer.invoke('load-config');
-    updateUI();
+// ---------------------------------------------------------------------------
+// Hilfsfunktionen
+// ---------------------------------------------------------------------------
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
 }
 
-// Save Configuration
+function targetInfo(app) {
+  if (SYSTEM_TARGETS[app]) return SYSTEM_TARGETS[app];
+  return { label: String(app).replace(/\.exe$/i, ''), icon: iconFor(app) };
+}
+
+function iconFor(app) {
+  const name = String(app).toLowerCase();
+  if (/chrome|edge|firefox|opera|brave/.test(name)) return '🌐';
+  if (name.includes('discord')) return '💬';
+  if (name.includes('teams')) return '👥';
+  if (name.includes('zoom')) return '📹';
+  if (name.includes('skype')) return '📞';
+  if (name.includes('teamspeak')) return '🎙️';
+  if (/spotify|amazon|music|deezer|tidal|qobuz|itunes|musicbee|foobar|winamp|groove/.test(name)) return '🎧';
+  if (/vlc|media|player/.test(name)) return '🎬';
+  if (/obs|stream/.test(name)) return '🎥';
+  if (/game|steam|epic|origin|uplay|gog|simulator/.test(name)) return '🎮';
+  if (/code|studio/.test(name)) return '💻';
+  return '🎵';
+}
+
 async function saveConfig() {
-    await ipcRenderer.invoke('save-config', config);
+  const result = await window.api.invoke('save-config', config);
+  if (result && result.config) config = result.config;
 }
 
-// Update UI from config
-function updateUI() {
-    config.sliders.forEach((slider, index) => {
-        const channel = document.querySelector(`[data-slider="${index}"]`);
-        if (channel && slider.app) {
-            assignAppToSlider(channel, slider.app, slider.name || slider.app);
-        }
-    });
-}
+// ---------------------------------------------------------------------------
+// Regler-Kanäle
+// ---------------------------------------------------------------------------
 
-// Event Listeners
-function setupEventListeners() {
-    // Settings Modal
-    settingsBtn.addEventListener('click', () => {
-        settingsModal.style.display = 'flex';
-        refreshPorts();
-    });
+function renderChannel(index) {
+  const channel = document.querySelector(`.mixer-channel[data-slider="${index}"]`);
+  if (!channel) return;
+  const slider = config.sliders[index];
+  const placeholder = channel.querySelector('.drop-placeholder');
+  const assigned = channel.querySelector('.assigned-app');
+  const nameInput = channel.querySelector('.channel-name');
 
-    closeSettings.addEventListener('click', () => {
-        settingsModal.style.display = 'none';
-    });
-
-    cancelSettings.addEventListener('click', () => {
-        settingsModal.style.display = 'none';
-    });
-
-    // Click outside modal to close
-    settingsModal.addEventListener('click', (e) => {
-        if (e.target === settingsModal) {
-            settingsModal.style.display = 'none';
-        }
-    });
-
-    // Refresh Apps
-    refreshApps.addEventListener('click', refreshAudioSessions);
-
-    // Connect Arduino
-    connectBtn.addEventListener('click', connectArduino);
-    refreshPortsBtn.addEventListener('click', refreshPorts);
-
-    // Autostart Checkbox
-    const autostartCheckbox = document.getElementById('autostartCheckbox');
-    if (autostartCheckbox) {
-        // Lade aktuellen Status
-        ipcRenderer.invoke('get-autostart').then(enabled => {
-            autostartCheckbox.checked = enabled;
-        });
-
-        // Bei Änderung speichern
-        autostartCheckbox.addEventListener('change', async (e) => {
-            const result = await ipcRenderer.invoke('set-autostart', e.target.checked);
-            if (!result.success) {
-                alert('Fehler beim Setzen des Autostarts: ' + (result.error || 'Unbekannter Fehler'));
-                e.target.checked = !e.target.checked; // Zurücksetzen
-            }
-        });
-    }
-
-    // Remove button for sliders
-    document.querySelectorAll('.btn-remove').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const channel = e.target.closest('.mixer-channel');
-            const sliderId = channel.dataset.slider;
-            removeAppFromSlider(channel);
-            config.sliders[sliderId] = { id: sliderId, name: null, app: null };
-            saveConfig();
-        });
-    });
-
-    // Channel name inputs
-    document.querySelectorAll('.channel-name').forEach(input => {
-        input.addEventListener('change', (e) => {
-            const channel = e.target.closest('.mixer-channel');
-            const sliderId = channel.dataset.slider;
-            if (config.sliders[sliderId]) {
-                config.sliders[sliderId].name = e.target.value;
-                saveConfig();
-            }
-        });
-    });
-}
-
-// Drag and Drop
-function setupDragAndDrop() {
-    // Make program items draggable
-    document.addEventListener('dragstart', (e) => {
-        if (e.target.classList.contains('program-item')) {
-            e.dataTransfer.effectAllowed = 'copy';
-            e.dataTransfer.setData('app', e.target.dataset.app);
-            e.dataTransfer.setData('name', e.target.querySelector('.program-name').textContent);
-            e.dataTransfer.setData('icon', e.target.querySelector('.program-icon').textContent);
-        }
-    });
-
-    // Drop zones
-    document.querySelectorAll('.drop-zone').forEach(zone => {
-        zone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            zone.classList.add('drag-over');
-        });
-
-        zone.addEventListener('dragleave', () => {
-            zone.classList.remove('drag-over');
-        });
-
-        zone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            zone.classList.remove('drag-over');
-
-            const app = e.dataTransfer.getData('app');
-            const name = e.dataTransfer.getData('name');
-            const icon = e.dataTransfer.getData('icon');
-            const sliderId = zone.dataset.slider;
-
-            assignAppToSlider(zone.closest('.mixer-channel'), app, name, icon);
-
-            // Update config
-            config.sliders[sliderId] = {
-                id: parseInt(sliderId),
-                name: name,
-                app: app
-            };
-            saveConfig();
-        });
-    });
-}
-
-// Assign app to slider
-function assignAppToSlider(channel, app, name, icon = '🔊') {
-    const dropZone = channel.querySelector('.drop-zone');
-    const placeholder = dropZone.querySelector('.drop-placeholder');
-    const assignedApp = dropZone.querySelector('.assigned-app');
-    const channelName = channel.querySelector('.channel-name');
-
+  assigned.replaceChildren();
+  if (slider.app) {
+    const info = targetInfo(slider.app);
+    assigned.append(el('span', 'app-icon', info.icon), el('span', 'app-name', info.label));
+    assigned.title = slider.app;
+    assigned.style.display = 'flex';
     placeholder.style.display = 'none';
-    assignedApp.style.display = 'flex';
-    assignedApp.innerHTML = `
-        <span class="app-icon">${icon}</span>
-        <span class="app-name">${name}</span>
-    `;
-
-    if (channelName) {
-        channelName.value = name;
-    }
-}
-
-// Remove app from slider
-function removeAppFromSlider(channel) {
-    const dropZone = channel.querySelector('.drop-zone');
-    const placeholder = dropZone.querySelector('.drop-placeholder');
-    const assignedApp = dropZone.querySelector('.assigned-app');
-    const sliderId = channel.dataset.slider;
-
+  } else {
+    assigned.style.display = 'none';
     placeholder.style.display = 'flex';
-    assignedApp.style.display = 'none';
-    assignedApp.innerHTML = '';
-
-    // Reset slider value display
-    const sliderValue = channel.querySelector('.slider-value');
-    const sliderFill = channel.querySelector('.slider-fill');
-    sliderValue.textContent = '0%';
-    sliderFill.style.height = '0%';
+  }
+  if (document.activeElement !== nameInput) nameInput.value = slider.name;
 }
 
-// Refresh COM Ports
-async function refreshPorts() {
-    const ports = await ipcRenderer.invoke('list-ports');
-    comPortSelect.innerHTML = '<option value="">Wähle einen Port...</option>';
+function renderAllChannels() {
+  for (let i = 0; i < SLIDER_COUNT; i++) renderChannel(i);
+}
 
-    ports.forEach(port => {
-        const option = document.createElement('option');
-        option.value = port.path;
-        option.textContent = `${port.path} ${port.manufacturer || ''}`;
-        comPortSelect.appendChild(option);
+function updateSliderDisplay(index, value) {
+  const channel = document.querySelector(`.mixer-channel[data-slider="${index}"]`);
+  if (!channel) return;
+  const percentage = Math.max(0, Math.min(100, Math.round((value / 1023) * 100)));
+  channel.querySelector('.slider-value').textContent = `${percentage}%`;
+  channel.querySelector('.slider-fill').style.height = `${percentage}%`;
+  channel.querySelector('.slider-thumb').style.bottom = `${percentage}%`;
+}
+
+async function assignTarget(index, app, label) {
+  config.sliders[index] = { id: index, name: label, app };
+  renderChannel(index);
+  await saveConfig();
+}
+
+async function clearChannel(index) {
+  config.sliders[index] = { id: index, name: `Slider ${index + 1}`, app: null };
+  renderChannel(index);
+  await saveConfig();
+}
+
+function setupChannels() {
+  channels().forEach((channel) => {
+    const index = Number(channel.dataset.slider);
+
+    channel.querySelector('.btn-remove').addEventListener('click', () => clearChannel(index));
+
+    channel.querySelector('.channel-name').addEventListener('change', async (e) => {
+      const name = e.target.value.trim().slice(0, 40) || `Slider ${index + 1}`;
+      config.sliders[index].name = name;
+      e.target.value = name;
+      await saveConfig();
     });
 
-    if (config.comPort) {
-        comPortSelect.value = config.comPort;
-    }
+    const zone = channel.querySelector('.drop-zone');
+    zone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      zone.classList.add('drag-over');
+    });
+    zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+    zone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      zone.classList.remove('drag-over');
+      const app = e.dataTransfer.getData('app');
+      const label = e.dataTransfer.getData('label');
+      if (app) assignTarget(index, app, label || targetInfo(app).label);
+    });
+  });
+
+  document.addEventListener('dragstart', (e) => {
+    const item = e.target.closest ? e.target.closest('.program-item') : null;
+    if (!item) return;
+    e.dataTransfer.effectAllowed = 'copy';
+    e.dataTransfer.setData('app', item.dataset.app);
+    e.dataTransfer.setData('label', item.querySelector('.program-name').textContent);
+  });
 }
 
-// Connect to Arduino
-async function connectArduino() {
-    const portPath = comPortSelect.value;
-    
-    if (!portPath) {
-        alert('Bitte wähle einen COM-Port aus!');
-        return;
-    }
+// ---------------------------------------------------------------------------
+// Programmliste (Programme mit Audio-Session)
+// ---------------------------------------------------------------------------
 
-    connectBtn.disabled = true;
-    connectBtn.textContent = 'Verbinde...';
-
-    const result = await ipcRenderer.invoke('connect-arduino', portPath);
-
-    if (result.success) {
-        connectedPort = portPath;
-        updateConnectionStatus(true, portPath);
-        
-        document.getElementById('connectionInfo').style.display = 'block';
-        document.getElementById('portStatus').textContent = 'Verbunden';
-        document.getElementById('portName').textContent = portPath;
-        
-        connectBtn.textContent = 'Verbunden';
-        setTimeout(() => {
-            settingsModal.style.display = 'none';
-        }, 1000);
-    } else {
-        alert('Verbindung fehlgeschlagen: ' + result.error);
-        connectBtn.disabled = false;
-        connectBtn.textContent = 'Verbinden';
-    }
-}
-
-// Update connection status
-function updateConnectionStatus(connected, port = null) {
-    const statusDot = connectionStatus.querySelector('.status-dot');
-    const statusText = connectionStatus.querySelector('.status-text');
-
-    if (connected) {
-        statusDot.classList.add('connected');
-        statusText.textContent = `Verbunden (${port})`;
-    } else {
-        statusDot.classList.remove('connected');
-        statusText.textContent = 'Nicht verbunden';
-    }
-}
-
-// Refresh audio sessions
 async function refreshAudioSessions() {
-    refreshApps.disabled = true;
-    refreshApps.textContent = '⏳';
-    
-    try {
-        const sessions = await ipcRenderer.invoke('get-audio-sessions');
-        
-        runningPrograms.innerHTML = '';
-        
-        if (sessions.length === 0) {
-            runningPrograms.innerHTML = '<p style="padding: 10px; color: #888; text-align: center;">Keine Programme gefunden</p>';
-            return;
-        }
-        
-        sessions.forEach(session => {
-            const item = document.createElement('div');
-            item.className = 'program-item';
-            item.draggable = true;
-            item.dataset.app = session.executable || session.name;
-            item.dataset.type = session.name === 'System' ? 'system' : 'app';
-            item.title = session.path || session.displayName;
-            
-            // Icon basierend auf dem Programm
-            let icon = '🎵';
-            const name = session.name.toLowerCase();
-            
-            if (session.name === 'System') icon = '🔊';
-            // Browser
-            else if (name.includes('chrome') || name.includes('edge') || name.includes('firefox') || name.includes('opera') || name.includes('brave')) icon = '🌐';
-            // Kommunikation
-            else if (name.includes('discord')) icon = '💬';
-            else if (name.includes('teams')) icon = '👥';
-            else if (name.includes('zoom')) icon = '📹';
-            else if (name.includes('skype')) icon = '📞';
-            else if (name.includes('teamspeak')) icon = '🎙️';
-            // Musik/Streaming
-            else if (name.includes('spotify')) icon = '🎧';
-            else if (name.includes('amazon') && name.includes('music')) icon = '🎧';
-            else if (name.includes('deezer') || name.includes('tidal') || name.includes('qobuz')) icon = '🎧';
-            else if (name.includes('itunes') || name.includes('musicbee') || name.includes('foobar') || name.includes('winamp')) icon = '🎧';
-            else if (name.includes('groove')) icon = '🎧';
-            // Video/Media
-            else if (name.includes('vlc') || name.includes('media') || name.includes('player')) icon = '🎬';
-            else if (name.includes('netflix') || name.includes('youtube')) icon = '📺';
-            else if (name.includes('obs') || name.includes('stream')) icon = '🎥';
-            // Gaming
-            else if (name.includes('game') || name.includes('steam') || name.includes('epic') || name.includes('origin') || name.includes('uplay') || name.includes('gog')) icon = '🎮';
-            // Development
-            else if (name.includes('code') || name.includes('studio') || name.includes('visual')) icon = '💻';
-            // Office
-            else if (name.includes('excel') || name.includes('word') || name.includes('powerpoint') || name.includes('outlook')) icon = '📊';
-            
-            item.innerHTML = `
-                <span class="program-icon">${icon}</span>
-                <div class="program-info">
-                    <span class="program-name">${session.displayName}</span>
-                    ${session.executable ? `<span class="program-exe">${session.executable}</span>` : ''}
-                </div>
-            `;
-            
-            runningPrograms.appendChild(item);
-        });
-        
-        console.log(`✓ ${sessions.length} Programme geladen`);
-    } catch (error) {
-        console.error('Fehler beim Laden der Programme:', error);
-        runningPrograms.innerHTML = '<p style="padding: 10px; color: #f88; text-align: center;">Fehler beim Laden</p>';
-    } finally {
-        refreshApps.disabled = false;
-        refreshApps.textContent = '🔄';
+  const button = $('refreshApps');
+  const list = $('runningPrograms');
+  button.disabled = true;
+  try {
+    const sessions = await window.api.invoke('get-audio-sessions');
+    list.replaceChildren();
+    if (sessions.length === 0) {
+      list.append(el('p', 'help-text', 'Keine Programme mit Ton gefunden. Ein Programm erscheint, sobald es Ton ausgibt.'));
+      return;
     }
-}
+    sessions.forEach((session) => {
+      const item = el('div', 'program-item');
+      item.draggable = true;
+      item.dataset.app = session.executable;
+      item.title = session.executable;
 
-// Handle slider values from Arduino
-ipcRenderer.on('slider-values', (event, values) => {
-    values.forEach((value, index) => {
-        updateSliderDisplay(index, value);
+      const info = el('div', 'program-info');
+      info.append(el('span', 'program-name', session.displayName), el('span', 'program-exe', session.executable));
+      item.append(el('span', 'program-icon', iconFor(session.executable)), info);
+      list.append(item);
     });
-});
-
-// Update slider display
-function updateSliderDisplay(sliderId, value) {
-    const channel = document.querySelector(`[data-slider="${sliderId}"]`);
-    if (!channel) return;
-
-    const percentage = Math.round((value / 1023) * 100);
-    const sliderValue = channel.querySelector('.slider-value');
-    const sliderFill = channel.querySelector('.slider-fill');
-    const sliderThumb = channel.querySelector('.slider-thumb');
-
-    if (sliderValue) {
-        sliderValue.textContent = `${percentage}%`;
-    }
-
-    if (sliderFill) {
-        sliderFill.style.height = `${percentage}%`;
-    }
-
-    if (sliderThumb) {
-        sliderThumb.style.bottom = `${percentage}%`;
-    }
+  } catch (err) {
+    list.replaceChildren(el('p', 'help-text', 'Programmliste konnte nicht geladen werden.'));
+  } finally {
+    button.disabled = false;
+  }
 }
 
-// Handle connection errors
-ipcRenderer.on('connection-error', (event, error) => {
-    console.error('Connection error:', error);
-    updateConnectionStatus(false);
-    connectBtn.disabled = false;
-    connectBtn.textContent = 'Verbinden';
-});
+// ---------------------------------------------------------------------------
+// Verbindung
+// ---------------------------------------------------------------------------
 
-// External links
-document.getElementById('githubLink')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    require('electron').shell.openExternal('https://github.com/JonasGrafKWR/Audiomixpult');
-});
+const STATUS_TEXT = {
+  disconnected: () => 'Nicht verbunden',
+  connecting: () => `Verbinde mit ${status.port || ''} ...`,
+  connected: () => `Verbunden (${status.port})`,
+  error: () => status.message || 'Verbindungsfehler'
+};
 
-document.getElementById('docsLink')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    require('electron').shell.openExternal('https://github.com/JonasGrafKWR/Audiomixpult#readme');
+function renderStatus() {
+  const dot = $('connectionStatus').querySelector('.status-dot');
+  dot.classList.remove('connected', 'connecting', 'error');
+  if (status.state !== 'disconnected') dot.classList.add(status.state);
+
+  const text = (STATUS_TEXT[status.state] || STATUS_TEXT.disconnected)();
+  const textEl = $('connectionStatus').querySelector('.status-text');
+  textEl.textContent = text;
+  textEl.title = text;
+
+  const info = $('connectionInfo');
+  info.style.display = status.state === 'disconnected' ? 'none' : 'block';
+  $('portStatus').textContent = text;
+  $('portName').textContent = status.port || '-';
+
+  const busy = status.state === 'connecting';
+  $('connectBtn').disabled = busy;
+  $('connectBtn').textContent = status.state === 'connected' ? 'Neu verbinden' : (busy ? 'Verbinde ...' : 'Verbinden');
+}
+
+async function refreshPorts() {
+  const select = $('comPortSelect');
+  const ports = await window.api.invoke('list-ports');
+  select.replaceChildren(new Option('Wähle einen Port...', ''));
+  ports.forEach((p) => select.append(new Option(`${p.path} ${p.manufacturer}`.trim(), p.path)));
+  if (config && config.comPort) {
+    if (!ports.some((p) => p.path === config.comPort)) {
+      select.append(new Option(`${config.comPort} (nicht gefunden)`, config.comPort));
+    }
+    select.value = config.comPort;
+  }
+}
+
+async function connectArduino() {
+  const port = $('comPortSelect').value;
+  if (!port) {
+    $('portStatus').textContent = 'Bitte einen COM-Port auswählen.';
+    $('connectionInfo').style.display = 'block';
+    return;
+  }
+  const result = await window.api.invoke('connect-arduino', port);
+  if (!result.success) {
+    status = { state: 'error', port, message: result.error || 'Verbindung fehlgeschlagen' };
+    renderStatus();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Einstellungen
+// ---------------------------------------------------------------------------
+
+function renderProfileSelect() {
+  $('profileSelect').value = config.currentProfile;
+}
+
+async function loadProfile(name) {
+  config.currentProfile = name;
+  const stored = config.profiles[name];
+  if (stored) {
+    config.sliders = stored.map((s) => ({ ...s }));
+    renderAllChannels();
+    $('profileHint').textContent = 'Zuordnung des Profils geladen.';
+  } else {
+    $('profileHint').textContent = 'Für dieses Profil ist noch nichts gespeichert. Mit "Profil speichern" ablegen.';
+  }
+  await saveConfig();
+}
+
+async function saveProfile() {
+  const name = $('profileSelect').value;
+  config.currentProfile = name;
+  config.profiles[name] = config.sliders.map((s) => ({ ...s }));
+  await saveConfig();
+  $('profileHint').textContent = 'Aktuelle Zuordnung im Profil gespeichert.';
+}
+
+function setupSettings() {
+  const modal = $('settingsModal');
+  const close = () => { modal.style.display = 'none'; };
+
+  $('settingsBtn').addEventListener('click', () => {
+    modal.style.display = 'flex';
+    refreshPorts();
+  });
+  $('closeSettings').addEventListener('click', close);
+  $('cancelSettings').addEventListener('click', close);
+  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+
+  $('refreshApps').addEventListener('click', refreshAudioSessions);
+  $('connectBtn').addEventListener('click', connectArduino);
+  $('refreshPortsBtn').addEventListener('click', refreshPorts);
+
+  // Autostart
+  const autostart = $('autostartCheckbox');
+  window.api.invoke('get-autostart').then((enabled) => { autostart.checked = !!enabled; });
+  autostart.addEventListener('change', async (e) => {
+    const result = await window.api.invoke('set-autostart', e.target.checked);
+    if (!result.success) {
+      e.target.checked = !e.target.checked;
+      $('autostartHelp').textContent = `Autostart nicht möglich: ${result.error || 'unbekannter Fehler'}`;
+    }
+  });
+
+  // In Taskleiste minimieren
+  const tray = $('minimizeToTrayCheckbox');
+  tray.checked = config.minimizeToTray;
+  tray.addEventListener('change', async (e) => {
+    config.minimizeToTray = e.target.checked;
+    await saveConfig();
+  });
+
+  // Profile
+  renderProfileSelect();
+  $('profileSelect').addEventListener('change', (e) => loadProfile(e.target.value));
+  $('saveProfileBtn').addEventListener('click', saveProfile);
+
+  // Externe Links (nur über feste Schlüssel, die URL kennt der Hauptprozess)
+  $('githubLink').addEventListener('click', (e) => { e.preventDefault(); window.api.invoke('open-external', 'github'); });
+  $('docsLink').addEventListener('click', (e) => { e.preventDefault(); window.api.invoke('open-external', 'docs'); });
+}
+
+// ---------------------------------------------------------------------------
+// Start
+// ---------------------------------------------------------------------------
+
+document.addEventListener('DOMContentLoaded', async () => {
+  config = await window.api.invoke('load-config');
+  status = await window.api.invoke('get-status');
+
+  setupChannels();
+  setupSettings();
+  renderAllChannels();
+  renderStatus();
+  refreshPorts();
+  refreshAudioSessions();
+
+  window.api.on('slider-values', (values) => {
+    values.slice(0, SLIDER_COUNT).forEach((value, i) => updateSliderDisplay(i, value));
+  });
+  window.api.on('connection-status', (next) => {
+    status = next;
+    renderStatus();
+    if (next.state === 'connected') $('settingsModal').style.display = 'none';
+  });
+
+  // Programmliste alle 5 Sekunden aktualisieren, solange das Fenster sichtbar ist
+  setInterval(() => {
+    if (document.visibilityState === 'visible') refreshAudioSessions();
+  }, 5000);
 });
