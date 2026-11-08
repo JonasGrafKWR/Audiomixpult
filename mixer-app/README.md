@@ -1,164 +1,81 @@
-# Audiomixpult Control - Electron App
+# Audiomixpult Control - Electron-App (experimentell)
 
-Moderne Desktop-Anwendung zur Steuerung deines Arduino Audio-Mixers.
+> ⚠️ **Experimentell und nicht gepflegt.** Für den Alltag wird das Original-**deej** empfohlen (siehe [Haupt-README](../README.md)). Diese App ist ein Prototyp mit bekannten Fehlern (siehe unten).
 
-## ✨ Features
+Eine Desktop-App, die die Werte des Arduino-Mixers über `serialport` liest und die Windows-Lautstärke mit **NirCmd** setzt.
 
-- 🎚️ **Visuelle Regler-Darstellung** - Sieh die Lautstärke in Echtzeit
-- 🖱️ **Drag & Drop** - Ziehe Programme einfach auf die Regler
-- 📊 **Live-Feedback** - Arduino-Werte werden live angezeigt
-- 🔌 **Auto-Detection** - Automatische COM-Port-Erkennung
-- 💾 **Profile** - Speichere verschiedene Setups (Gaming, Office, etc.)
-- 🌙 **Dark Mode** - Modernes, dunkles Design
-- 📱 **System Tray** - Läuft im Hintergrund
+## Was die App kann
 
-## 🚀 Installation
+- Die fünf Reglerwerte live anzeigen
+- COM-Ports auflisten und mit dem Arduino verbinden
+- Laufende Programme (mit Fenster) in einer Liste anzeigen und per Drag & Drop einem Regler zuordnen
+- Master-Lautstärke (`nircmd setsysvolume`) und Lautstärke einzelner Programme (`nircmd setappvolume`) setzen
+- Autostart per Verknüpfung im Windows-Autostart-Ordner (nur sinnvoll in der gebauten App)
+- Nur eine Instanz gleichzeitig
 
-### Voraussetzungen
+## Was die App (noch) nicht kann
 
-- Node.js (v18 oder höher)
-- npm oder yarn
-- Arduino Nano mit Audiomixer-Code
+Folgendes wurde früher beschrieben, ist aber **nicht umgesetzt**:
 
-### Setup
+- Profile (Gaming, Office ...) speichern. Die Oberfläche hat eine Überschrift, aber keine Funktion.
+- System Tray. Der Code ist auskommentiert. Das Schließen des Fensters versteckt es nur, ohne Tray lässt es sich nicht wieder öffnen.
+- Die Konfiguration (COM-Port, Zuordnungen) dauerhaft speichern. Sie liegt nur im Arbeitsspeicher und ist beim nächsten Start weg.
+- `mic`, `system`, `deej.unmapped` oder Gerätenamen als Ziel (wie in deej).
+- Auto-Connect und Reconnect.
 
-1. **Abhängigkeiten installieren:**
+## Bekannte Fehler
+
+- **Verlorene Reglerposition:** `setSystemVolume()` verwirft Werte, solange der Lock gesetzt ist, `applyVolumeChanges()` merkt sich den Wert aber trotzdem. Die letzte Position kann so verloren gehen.
+- **Ein Prozess pro Änderung:** Jede Lautstärkeänderung startet einen neuen `nircmd`-Prozess. Mehrere laufen ungeordnet und können einen veralteten Wert hinterlassen.
+- **0 % und 100 % nicht sicher erreichbar:** Änderungen unter 10 Punkten werden ignoriert.
+- **Sicherheit:** Der Renderer läuft mit `nodeIntegration: true` und `contextIsolation: false`. Fenstertitel laufen per `innerHTML` in die Oberfläche. Ein Browser-Tab mit HTML im Titel könnte so Code mit Node-Rechten ausführen.
+- **DevTools** öffnen immer automatisch.
+- Das Zuordnen von "System Sounds" setzt eine App namens `system.exe`, das bewirkt nichts.
+- Die Abhängigkeit `loudness` in der `package.json` wird nicht benutzt.
+
+## Zusammenspiel mit dem Sketch
+
+Der Sketch (`audiomixer/audiomixer.ino`) sendet Zeilen `w1|w2|w3|w4|w5\r\n` mit Werten von 0 bis 1023 und kehrt Regler selbst um (`INVERT[]`). Die App invertiert nichts mehr.
+
+Die App und deej können den COM-Port **nicht gleichzeitig** öffnen. Vor dem Start der App deej beenden (und umgekehrt).
+
+## Starten (Entwicklung)
+
+Voraussetzung: Node.js (v18 oder höher).
 
 ```powershell
 cd mixer-app
 npm install
-```
-
-2. **App starten:**
-
-```powershell
 npm start
 ```
 
-### Development Mode
-
-```powershell
-npm run dev
-```
-
-## 📦 App bauen
-
-### Windows Installer erstellen:
+## Windows-Installer bauen (optional)
 
 ```powershell
 npm run build:win
 ```
 
-Dies erstellt:
-- `dist/Audiomixpult Control Setup.exe` - Installer
-- `dist/Audiomixpult Control.exe` - Portable Version
+Das erzeugt Installer und Portable-Version im lokalen Ordner `dist/` (nicht im Repo).
 
-## 🎮 Benutzung
-
-### 1. Arduino verbinden
-
-1. Starte die App
-2. Klicke auf **⚙️ Einstellungen**
-3. Wähle deinen COM-Port aus
-4. Klicke auf **Verbinden**
-
-### 2. Programme zuordnen
-
-1. **Drag & Drop:**
-   - Ziehe ein Programm aus der linken Sidebar
-   - Lasse es auf einem Regler fallen
-
-2. **System-Controls:**
-   - Master Volume: Gesamt-Lautstärke
-   - Mikrofon: Mikrofon-Pegel
-
-### 3. Profile speichern
-
-1. Konfiguriere deine Regler
-2. Gehe zu Einstellungen → Profile
-3. Wähle ein Profil oder erstelle ein neues
-4. Klicke auf **Profil speichern**
-
-## 🛠️ Entwicklung
-
-### Projekt-Struktur
+## Projektstruktur
 
 ```
 mixer-app/
-├── main.js              # Electron Main Process
-├── index.html           # UI Layout
-├── styles.css           # Styling
-├── renderer.js          # Frontend Logic
-├── package.json         # Dependencies
-└── assets/              # Icons, Images
+├── main.js          # Electron Main Process, Serial, NirCmd
+├── renderer.js      # Oberfläche, Drag & Drop
+├── index.html       # Layout
+├── styles.css       # Styling
+├── package.json
+└── assets/          # Icons, nircmd.exe, nircmdc.exe, NirCmd.chm, autostart.vbs
 ```
 
-### Wichtige Dateien
+Hinweis zu `assets/nircmd.exe`: NirCmd ist ein Freeware-Programm von NirSoft. Die Dateien liegen bereits im Repo. Die Lizenzbedingungen für die Weitergabe sind nicht geprüft.
 
-- **main.js**: Backend-Logik, IPC-Handler, Serial Communication
-- **renderer.js**: Frontend-Logik, Drag & Drop, UI Updates
-- **styles.css**: Modernes Dark Theme Design
+## IPC-Kanäle
 
-## 🔧 Konfiguration
+- Main → Renderer: `slider-values`, `connection-error`
+- Renderer → Main: `list-ports`, `connect-arduino`, `save-config`, `load-config`, `get-audio-sessions`, `get-autostart`, `set-autostart`
 
-Die App speichert die Konfiguration automatisch:
-- Windows: `%APPDATA%/audiomixpult-control/config.json`
-- Beinhaltet: COM-Port, Slider-Zuordnungen, Profile
+## Lizenz
 
-## 📚 API
-
-### IPC Channels
-
-#### Main → Renderer
-- `slider-values`: Arduino-Werte (Array)
-- `connection-error`: Verbindungsfehler
-- `show-settings`: Einstellungen öffnen
-
-#### Renderer → Main
-- `list-ports`: COM-Ports abrufen
-- `connect-arduino`: Verbindung herstellen
-- `save-config`: Konfiguration speichern
-- `load-config`: Konfiguration laden
-- `get-audio-sessions`: Laufende Programme abrufen
-
-## 🐛 Troubleshooting
-
-### App startet nicht
-```powershell
-# Cache löschen und neu installieren
-rm -r node_modules
-rm package-lock.json
-npm install
-```
-
-### COM-Port nicht gefunden
-- Arduino anschließen
-- Gerätemanager öffnen
-- CH340 Treiber installieren
-
-### Kein Audio-Control
-- Windows Audio-Session-API wird verwendet
-- Programme müssen Audio abspielen
-
-## 🤝 Contributing
-
-Verbesserungen sind willkommen!
-
-1. Fork das Repository
-2. Erstelle einen Feature Branch
-3. Committe deine Änderungen
-4. Push zum Branch
-5. Öffne einen Pull Request
-
-## 📄 Lizenz
-
-MIT License - siehe [LICENSE](../LICENSE)
-
-## 👨‍💻 Autor
-
-**JonasGrafKWR**
-- GitHub: [@JonasGrafKWR](https://github.com/JonasGrafKWR)
-
----
-
-**Viel Spaß mit deinem Audio-Mixer! 🎚️🎵**
+MIT, siehe [LICENSE](../LICENSE).

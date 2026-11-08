@@ -23,16 +23,17 @@ slider_mapping:
 # Oder in der Arduino IDE unter Tools -> Port
 com_port: COM3
 
-# Wie oft die Prozessliste aktualisiert wird (in Sekunden)
-# Erhöhen bei Performance-Problemen
-process_refresh_frequency: 5
+# Baudrate - muss mit BAUD_RATE im Arduino-Sketch übereinstimmen (Standard: 9600)
+baud_rate: 9600
 
-# Lautstärke beim Start halten (true) oder auf Regler-Position setzen (false)
+# Alle Regler umkehren (true = oben ist 0 %, unten ist 100 %)
+# Gilt für ALLE Regler. Einzelne Regler werden im Arduino-Sketch über das
+# Array INVERT[] umgekehrt (dort sind aktuell alle fünf Regler umgekehrt).
 invert_sliders: false
 
 # Noise Reduction - ignoriert kleine Wertänderungen
-# Standard: 1 (kann erhöht werden bei zittrigen Reglern)
-noise_reduction: 1
+# Erlaubte Werte: low (sehr gute Hardware), default, high (zittrige Regler)
+noise_reduction: default
 
 # ============================================
 # HÄUFIGE ANWENDUNGEN (Prozessnamen)
@@ -136,9 +137,9 @@ noise_reduction: 1
 #        - teamspeak3.exe
 #      2: spotify.exe
 #
-# 5. Debug-Mode aktivieren (für Fehlersuche):
-#    Füge diese Zeile hinzu:
-#    log_level: debug
+# 5. Debug-Ausgabe aktivieren (für Fehlersuche):
+#    deej im Terminal starten:  deej.exe --verbose
+#    (zeigt u.a. jede empfangene Zeile und erkannte Reglerbewegungen)
 #
 # ============================================
 # TROUBLESHOOTING
@@ -146,14 +147,14 @@ noise_reduction: 1
 #
 # Problem: Anwendung wird nicht gefunden
 # Lösung: 
-#   - Prozessname mit .exe-Endung schreiben
-#   - Klein-/Großschreibung beachten
+#   - Prozessname mit .exe-Endung schreiben (z.B. discord.exe, nicht discord)
+#   - Groß-/Kleinschreibung ist egal
 #   - Anwendung muss Audio abspielen
 #
 # Problem: Regler zittert/springt
 # Lösung:
-#   - noise_reduction erhöhen (z.B. auf 3)
-#   - NOISE_THRESHOLD im Arduino Code erhöhen
+#   - noise_reduction auf high setzen
+#   - NUM_READINGS bzw. SNAP_MARGIN im Arduino-Sketch erhöhen
 #
 # Problem: COM-Port nicht gefunden
 # Lösung:

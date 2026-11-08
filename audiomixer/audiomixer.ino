@@ -1,7 +1,7 @@
 /**
- * AudioMixpult - Verbesserter Arduino Code für DEEJ Lautstärkemixer
+ * AudioMixpult - Arduino-Sketch für den deej Lautstärkemixer
  * Hardware: Arduino Nano V3 mit 5 Schiebepotentiometern
- * 
+ *
  * Anschlüsse:
  * - Poti 1 (OTA1) -> A0
  * - Poti 2 (OTA2) -> A1
@@ -10,133 +10,107 @@
  * - Poti 5 (OTA5) -> A4
  * - Alle GND zusammen -> GND
  * - Alle VCC zusammen -> 5V
- * 
+ *
+ * Serielles Protokoll (kompatibel zu deej):
+ * - 9600 Baud, 8N1
+ * - Eine Zeile pro Durchlauf: "w1|w2|w3|w4|w5\r\n" (Werte 0-1023)
+ * - Zeilenende MUSS \r\n sein (Serial.println), sonst verwirft deej die Zeile
+ * - Es wird dauerhaft gesendet (nicht nur bei Änderung), damit deej nach
+ *   Start, Reconnect oder Config-Reload sofort alle Reglerpositionen kennt
+ *
  * Author: JonasGrafKWR
- * Version: 1.0
- * Datum: November 2025
+ * Version: 1.1
  */
 
 // Konfiguration
 const int NUM_SLIDERS = 5;
 const int ANALOG_PINS[NUM_SLIDERS] = {A0, A1, A2, A3, A4};
 
-// Baudrate für serielle Kommunikation (muss mit deej-Software übereinstimmen)
-const int BAUD_RATE = 9600;
+// Regler umkehren (true = Wert wird als 1023 - Wert gesendet).
+// Bei der aktuellen Verdrahtung laufen alle fünf Regler "falsch herum".
+// Alternative zum Umkehren hier: am Poti die Leitungen 5V und GND tauschen
+// und den Eintrag auf false setzen.
+const bool INVERT[NUM_SLIDERS] = {true, true, true, true, true};
 
-// Schwellenwert für Änderungserkennung (verhindert Rauschen)
-const int NOISE_THRESHOLD = 3;
+// Baudrate (muss mit baud_rate in der deej-config.yaml übereinstimmen)
+const long BAUD_RATE = 9600;
 
-// Glättungsparameter für stabilere Werte
-const int NUM_READINGS = 5;
+// Glättung: gleitender Mittelwert über die letzten NUM_READINGS Messungen
+const int NUM_READINGS = 4;
+
+// Werte nahe an den Anschlägen werden auf 0 bzw. 1023 gesetzt, damit
+// deej wirklich 0 % und 100 % erreicht (Poti-Rauschen am Anschlag)
+const int SNAP_MARGIN = 3;
+
+// Pause zwischen zwei Durchläufen in Millisekunden (wie im deej-Original)
+const int LOOP_DELAY_MS = 10;
+
 int readings[NUM_SLIDERS][NUM_READINGS];
-int readIndex[NUM_SLIDERS];
+int readIndex = 0;
 int total[NUM_SLIDERS];
-int average[NUM_SLIDERS];
 
-// Letzter gesendeter Wert (zur Änderungserkennung)
-int lastSentValue[NUM_SLIDERS];
+/**
+ * Liest einen Regler (0-1023) und kehrt den Wert bei Bedarf um.
+ * Die erste Messung wird verworfen, damit sich der ADC nach dem
+ * Kanalwechsel einschwingen kann (hochohmige Quellen, Übersprechen).
+ */
+int readSlider(int i) {
+  analogRead(ANALOG_PINS[i]);
+  int value = analogRead(ANALOG_PINS[i]);
+  return INVERT[i] ? 1023 - value : value;
+}
 
 void setup() {
-  // Serielle Verbindung starten
   Serial.begin(BAUD_RATE);
-  
-  // Analoge Eingänge als INPUT konfigurieren (optional, da bereits Standard)
+
   for (int i = 0; i < NUM_SLIDERS; i++) {
     pinMode(ANALOG_PINS[i], INPUT);
   }
-  
-  // Arrays initialisieren
+
+  // Glättungspuffer mit echten Messwerten füllen, damit die Werte
+  // direkt nach dem Start stimmen (kein Hochlaufen von 0)
   for (int i = 0; i < NUM_SLIDERS; i++) {
-    readIndex[i] = 0;
     total[i] = 0;
-    average[i] = 0;
-    lastSentValue[i] = 0;
-    
-    // Alle Readings mit 0 initialisieren
     for (int j = 0; j < NUM_READINGS; j++) {
-      readings[i][j] = 0;
+      readings[i][j] = readSlider(i);
+      total[i] += readings[i][j];
     }
   }
-  
-  // Kurze Pause für Stabilisierung
-  delay(100);
 }
 
 void loop() {
-  boolean needsUpdate = false;
-  
-  // Alle Potentiometer auslesen und glätten
+  // Alle Regler messen und den Puffer aktualisieren
   for (int i = 0; i < NUM_SLIDERS; i++) {
-    // Alten Wert aus dem Glättungspuffer entfernen
-    total[i] = total[i] - readings[i][readIndex[i]];
-    
-    // Neuen Wert einlesen
-    readings[i][readIndex[i]] = analogRead(ANALOG_PINS[i]);
-    
-    // Neuen Wert zum Total addieren
-    total[i] = total[i] + readings[i][readIndex[i]];
-    
-    // Index für nächsten Durchlauf erhöhen
-    readIndex[i] = (readIndex[i] + 1) % NUM_READINGS;
-    
-    // Durchschnitt berechnen
-    average[i] = total[i] / NUM_READINGS;
-    
-    // Prüfen ob sich der Wert signifikant geändert hat
-    if (abs(average[i] - lastSentValue[i]) > NOISE_THRESHOLD) {
-      needsUpdate = true;
-      lastSentValue[i] = average[i];
-    }
+    total[i] -= readings[i][readIndex];
+    readings[i][readIndex] = readSlider(i);
+    total[i] += readings[i][readIndex];
   }
-  
-  // Nur senden wenn sich Werte geändert haben
-  if (needsUpdate) {
-    sendSliderValues();
-  }
-  
-  // Kleine Verzögerung um CPU-Last zu reduzieren
-  delay(10);
+  readIndex = (readIndex + 1) % NUM_READINGS;
+
+  sendSliderValues();
+  delay(LOOP_DELAY_MS);
 }
 
 /**
- * Sendet die aktuellen Potentiometerwerte über die serielle Schnittstelle
- * Format: "value1|value2|value3|value4|value5\n"
+ * Sendet die geglätteten Werte: "w1|w2|w3|w4|w5\r\n"
  */
 void sendSliderValues() {
-  String output = "";
-  
   for (int i = 0; i < NUM_SLIDERS; i++) {
-    output += String(lastSentValue[i]);
-    
-    // Trennzeichen hinzufügen (außer beim letzten Wert)
-    if (i < NUM_SLIDERS - 1) {
-      output += "|";
-    }
-  }
-  
-  // Newline hinzufügen und senden
-  output += "\n";
-  Serial.print(output);
-}
+    int value = total[i] / NUM_READINGS;
 
-/**
- * Alternative Methode: Direkt ohne Glättung (schneller, aber anfälliger für Rauschen)
- * Kommentiere die loop() Funktion oben aus und benenne diese in loop() um
- */
-void loop_simple() {
-  String output = "";
-  
-  for (int i = 0; i < NUM_SLIDERS; i++) {
-    int value = analogRead(ANALOG_PINS[i]);
-    output += String(value);
-    
+    // An den Anschlägen einrasten
+    if (value <= SNAP_MARGIN) {
+      value = 0;
+    } else if (value >= 1023 - SNAP_MARGIN) {
+      value = 1023;
+    }
+
+    Serial.print(value);
     if (i < NUM_SLIDERS - 1) {
-      output += "|";
+      Serial.print('|');
     }
   }
-  
-  output += "\n";
-  Serial.print(output);
-  
-  delay(50);
+
+  // println sendet \r\n - zwingend nötig für deej
+  Serial.println();
 }

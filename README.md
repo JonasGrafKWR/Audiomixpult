@@ -1,221 +1,218 @@
 # 🎚️ Audiomixpult - DIY Arduino Lautstärkemixer
 
-Ein verbesserter Hardware-Lautstärkemixer basierend auf Arduino Nano V3 und dem DEEJ-Projekt. Steuere die Lautstärke einzelner Anwendungen auf deinem PC mit physischen Schiebereglern!
+Ein Hardware-Lautstärkemixer für Windows auf Basis eines Arduino Nano V3 und des [deej](https://github.com/omriharel/deej)-Projekts. Mit fünf Schiebereglern steuerst du die Lautstärke einzelner Anwendungen (Discord, Spotify, Browser, Spiele ...) oder die Master-Lautstärke.
 
 ![Arduino Nano](https://img.shields.io/badge/Arduino-Nano%20V3-00979D?logo=arduino)
 ![License](https://img.shields.io/badge/License-MIT-green)
-![Status](https://img.shields.io/badge/Status-Active-success)
 
 ## 📋 Was ist das?
 
-Dieses Projekt ermöglicht es dir, die Lautstärke verschiedener Anwendungen (Discord, Spotify, Browser, Games, etc.) auf deinem Windows- oder Linux-PC mit physischen Reglern zu steuern - wie ein DJ-Mischpult! Kein lästiges Alt-Tabbing mehr, um die Lautstärke anzupassen.
+Der Arduino liest fünf Potentiometer aus und schickt die Werte über USB (seriell) an den PC. Das Original-Programm **deej** setzt daraus die Lautstärke der zugeordneten Programme. Dieses Repo enthält:
 
-**Verbesserungen gegenüber dem Original:**
-- ✅ Optimierte Analogwert-Glättung gegen Rauschen
-- ✅ Intelligente Änderungserkennung (spart CPU)
-- ✅ Sauberer, gut dokumentierter Code
-- ✅ Einfache Konfiguration
-- ✅ Niedrigere Latenz
+- den **Arduino-Sketch** (`audiomixer/audiomixer.ino`), kompatibel zum deej-Protokoll,
+- eine **Beispiel-Konfiguration** für deej (`config-example.yaml`),
+- Hardware-Doku und Einkaufsliste (`docs/`),
+- eine **experimentelle** eigene Desktop-App (`mixer-app/`), siehe unten. Empfohlen wird deej.
+
+**Was der Sketch gegenüber dem deej-Original macht:**
+- Glättung der Analogwerte (gleitender Mittelwert über 4 Messungen), das reduziert Zittern.
+- Werte nahe an den Anschlägen rasten auf 0 bzw. 1023 ein, damit 0 % und 100 % wirklich erreicht werden.
+- Einzelne Regler lassen sich per `INVERT[]` im Sketch umkehren, falls ein Poti andersherum verdrahtet ist.
+- Gesendet wird dauerhaft (wie im Original), damit deej nach Start, Reconnect oder Config-Reload sofort alle Reglerstellungen kennt.
 
 ## 🛠️ Benötigte Hardware
 
 | Komponente | Anzahl | Beschreibung |
 |------------|--------|--------------|
-| Arduino Nano V3 | 1x | Mit CH340G USB-Chip |
-| Schiebepotentiometer 10kΩ | 5x | Linear, 2-fach |
-| Dupont Jumperkabel | 1x Set | Buchse-Buchse, 20cm |
-| USB-Kabel | 1x | Mini-USB für Arduino Nano |
+| Arduino Nano V3 | 1x | Mit CH340-USB-Chip (Klon) |
+| Schiebepotentiometer 10kΩ | 5x | Linear |
+| Dupont Jumperkabel oder Litze | 1x Set | zum Verbinden |
+| USB-Kabel | 1x | Mini-USB, mit Datenleitungen |
 | Gehäuse | 1x | Optional: 3D-gedruckt oder selbstgebaut |
 
-**Geschätzte Kosten:** ~20-30€
+Mehr dazu in [docs/HARDWARE.md](docs/HARDWARE.md) und [docs/EINKAUFSLISTE.md](docs/EINKAUFSLISTE.md).
 
 ## 🔌 Anschlussplan
 
 ```
-Potentiometer 1 (OTA) -> Arduino A0
-Potentiometer 2 (OTA) -> Arduino A1  
-Potentiometer 3 (OTA) -> Arduino A2
-Potentiometer 4 (OTA) -> Arduino A3
-Potentiometer 5 (OTA) -> Arduino A4
+Regler 1 (Schleifer / OTA) -> Arduino A0
+Regler 2 (Schleifer / OTA) -> Arduino A1
+Regler 3 (Schleifer / OTA) -> Arduino A2
+Regler 4 (Schleifer / OTA) -> Arduino A3
+Regler 5 (Schleifer / OTA) -> Arduino A4
 
-Alle VCC zusammen   -> Arduino 5V
-Alle GND zusammen   -> Arduino GND
+Alle Potis: Außenanschluss 1 -> 5V, Außenanschluss 2 -> GND
 ```
 
-**Pinbelegung Schiebepotentiometer:**
-- **VCC**: Versorgungsspannung (5V)
-- **GND**: Masse
-- **OTA**: Ausgang (Signal zum Arduino)
-
-### Schaltplan
-
-```
-         5V                    GND
-          │                     │
-          ├──────┬──────┬───────┼──────┬───────┐
-          │      │      │       │      │       │
-        [Poti1][Poti2][Poti3][Poti4][Poti5]
-          │      │      │       │      │       
-          A0     A1     A2      A3     A4
-          └──────┴──────┴───────┴──────┴────> Arduino Nano
-```
+Die Reihenfolge der Pins am Poti ist herstellerabhängig. Läuft ein Regler "falsch herum", tausche 5V und GND an diesem Poti oder setze den Eintrag in `INVERT[]` im Sketch (siehe unten).
 
 ## 📥 Installation & Setup
 
-### 1. Arduino IDE installieren
+### 1. CH340-Treiber
 
-Download: [https://www.arduino.cc/en/software](https://www.arduino.cc/en/software)
+Ein Nano-Klon braucht den CH340/CH341-Treiber von WCH: [wch-ic.com/downloads/CH341SER_EXE.html](https://www.wch-ic.com/downloads/CH341SER_EXE.html). Danach erscheint der Nano im Gerätemanager unter "Anschlüsse (COM & LPT)" als `USB-SERIAL CH340 (COMx)`.
 
-### 2. Code auf Arduino laden
+> **Hinweis:** Bei einem Testaufbau mit dem WCH-Treiber **3.9.2024.9** verband deej nicht (der Treiber meldete bei der Port-Einstellung Fehler 31, "Gerät funktioniert nicht"). Mit dem älteren Treiber **3.5.2019.1** lief alles. Siehe Troubleshooting.
 
-1. Arduino Nano via USB an PC anschließen
-2. Arduino IDE öffnen
-3. Datei `audiomixer.ino` öffnen
-4. **Tools** → **Board** → **Arduino Nano** auswählen
-5. **Tools** → **Processor** → **ATmega328P (Old Bootloader)** auswählen
-6. **Tools** → **Port** → COM-Port auswählen (z.B. COM3)
-7. Auf den **Upload-Button** (→) klicken
+### 2. Sketch auf den Arduino laden
 
-> **Hinweis:** Falls Upload fehlschlägt, versuche "ATmega328P" statt "Old Bootloader"
+**Mit der Arduino IDE:**
 
-### 3. DEEJ Software installieren
+1. Arduino Nano per USB anschließen.
+2. `audiomixer/audiomixer.ino` öffnen.
+3. **Werkzeuge → Board**: *Arduino Nano*
+4. **Werkzeuge → Prozessor**: *ATmega328P (Old Bootloader)*
+5. **Werkzeuge → Port**: den COM-Port des Nano wählen.
+6. **Hochladen** (→). Schlägt der Upload mit `stk500_getsync` fehl, probiere *ATmega328P* ohne "Old Bootloader".
 
-1. Download der neuesten Version: [https://github.com/omriharel/deej/releases](https://github.com/omriharel/deej/releases)
-2. ZIP-Datei entpacken
-3. `deej.exe` starten
-4. Icon erscheint im System Tray
+**Mit arduino-cli** (alternativ):
 
-### 4. Konfiguration
+```powershell
+arduino-cli compile --fqbn arduino:avr:nano:cpu=atmega328old audiomixer
+arduino-cli upload -p COM6 --fqbn arduino:avr:nano:cpu=atmega328old audiomixer
+```
 
-1. Rechtsklick auf DEEJ Icon im System Tray → **"Edit config"**
-2. `config.yaml` anpassen (siehe [config-example.yaml](config-example.yaml))
-3. COM-Port eintragen (siehe Gerätemanager)
-4. Anwendungen den Slidern zuordnen
-5. DEEJ neustarten
+Der Upload funktioniert nur, wenn der COM-Port frei ist (deej beenden, Serial Monitor schließen).
+
+### 3. Sketch testen (Serial Monitor)
+
+1. Serial Monitor öffnen, **9600 Baud**.
+2. Es laufen fortlaufend Zeilen wie `0|240|1023|0|483`, jeweils 5 Werte von 0 bis 1023.
+3. Regler ganz in die eine Richtung: `0`, ganz in die andere: `1023`. Alle fünf sollen gleichsinnig laufen.
+4. Serial Monitor wieder schließen, sonst kann deej den Port nicht öffnen.
+
+### 4. deej installieren
+
+1. Aktuelle Version von [github.com/omriharel/deej/releases](https://github.com/omriharel/deej/releases) laden und in einen festen Ordner entpacken (z. B. `C:\Users\<Name>\deej`).
+2. [config-example.yaml](config-example.yaml) als `config.yaml` neben `deej.exe` legen und anpassen (COM-Port, Programmnamen).
+3. `deej.exe` starten. deej hat **kein Fenster**, es läuft als Symbol im Infobereich der Taskleiste (hinter dem Pfeil `^`).
+4. Optional: Verknüpfung zu `deej.exe` in den Autostart legen (`Win + R`, `shell:startup`).
 
 ## ⚙️ Konfigurationsbeispiel
 
 ```yaml
 slider_mapping:
   0: master                    # Regler 1: Systemlautstärke
-  1: discord                   # Regler 2: Discord
-  2: spotify                   # Regler 3: Spotify
-  3: chrome                    # Regler 4: Browser
-  4: deej.unmapped            # Regler 5: Nicht zugeordnet
+  1: discord.exe               # Regler 2: Discord
+  2: spotify.exe               # Regler 3: Spotify
+  3: chrome.exe                # Regler 4: Browser
+  4: deej.unmapped             # Regler 5: alles, was nicht zugeordnet ist
 
 # COM-Port des Arduino (im Gerätemanager prüfen)
 com_port: COM3
 
-# Keine Änderung nötig
-process_refresh_frequency: 5
+# Muss zum Sketch passen (BAUD_RATE = 9600)
+baud_rate: 9600
+
+# low, default oder high
+noise_reduction: default
 ```
 
-**Tipp:** Du kannst auch Geräte wie Mikrofon oder Lautsprecher zuordnen!
+Wichtig:
+- Prozessnamen mit **`.exe`** schreiben, Groß-/Kleinschreibung ist egal.
+- Ein Programm erscheint für deej erst, wenn es **schon Ton ausgegeben hat**.
+- `master`, `mic`, `system` und `deej.unmapped` brauchen kein `.exe`.
+- Mehr Beispiele stehen in [config-example.yaml](config-example.yaml).
 
 ## 🎮 Verwendung
 
-### Option 1: Mit DEEJ Software (Original)
+### Option 1: deej (empfohlen)
 
-1. DEEJ Software starten
-2. Arduino an USB anschließen
-3. Regler bewegen - fertig! 🎉
+deej starten, Regler bewegen, fertig. Die Konfiguration steht in `config.yaml`. Bei Problemen die Datei `logs/deej-latest-run.log` neben `deej.exe` ansehen, oder deej im Terminal mit `deej.exe --verbose` starten.
 
-Die Software läuft im Hintergrund und passt die Lautstärke automatisch an.
+### Option 2: Eigene Desktop-App (experimentell)
 
-### Option 2: Mit Electron App (Neu! 🆕)
+Im Ordner [mixer-app/](mixer-app/) liegt eine eigene Electron-App (serialport + NirCmd). Sie ist **experimentell und nicht gepflegt**: Konfiguration wird nicht gespeichert, Lautstärke wird über jeweils einen eigenen Prozess pro Änderung gesetzt, und es gibt bekannte Fehler und Sicherheitsmängel. Details in [mixer-app/README.md](mixer-app/README.md). Für den Alltag deej verwenden.
 
-**Moderne Desktop-App mit grafischer Oberfläche!**
+## 📡 Serielles Protokoll
 
-Features:
-- 🎨 Schöne, moderne UI
-- 🖱️ Drag & Drop von Programmen
-- 📊 Live-Visualisierung der Regler
-- 💾 Profile speichern (Gaming, Office, etc.)
-- 🌙 Dark Mode
-
-**Installation:**
-
-```powershell
-cd mixer-app
-npm install
-npm start
-```
-
-Mehr Infos: [mixer-app/README.md](mixer-app/README.md)
+- 9600 Baud, 8N1
+- Eine Zeile pro Durchlauf: `w1|w2|w3|w4|w5\r\n` mit Werten von 0 bis 1023
+- Das Zeilenende muss **`\r\n`** sein (`Serial.println`), sonst verwirft deej die Zeile. deej akzeptiert nur Zeilen, die auf `^\d{1,4}(\|\d{1,4})*\r\n$` passen.
+- Die Anzahl der Regler ergibt sich aus der Anzahl der Werte pro Zeile.
 
 ## 📁 Projektstruktur
 
 ```
 Audiomixpult/
-├── audiomixer.ino          # Arduino Sketch (Hauptcode)
-├── config-example.yaml     # Beispielkonfiguration für DEEJ
-├── README.md               # Diese Datei
-├── mixer-app/              # 🆕 Electron Desktop App
-│   ├── main.js            # Backend-Logik
-│   ├── index.html         # UI
-│   ├── styles.css         # Styling
-│   ├── renderer.js        # Frontend-Logik
-│   └── README.md          # App-Dokumentation
-└── docs/                   # Zusätzliche Dokumentation
-    ├── HARDWARE.md         # Hardware-Details
-    └── EINKAUFSLISTE.md    # Shopping-Liste
+├── audiomixer/
+│   └── audiomixer.ino      # Arduino Sketch (deej-kompatibel)
+├── config-example.yaml     # Beispielkonfiguration für deej
+├── docs/
+│   ├── HARDWARE.md         # Pinbelegung, Verkabelung, Fehlersuche
+│   └── EINKAUFSLISTE.md    # Einkaufsliste
+├── mixer-app/              # Experimentelle Electron-App (nicht gepflegt)
+│   ├── main.js, renderer.js, index.html, styles.css
+│   ├── package.json
+│   ├── assets/             # Icons, NirCmd
+│   ├── README.md, QUICKSTART.md, INSTALLATION.md
+├── CLAUDE.md               # Notizen für die Arbeit mit Claude Code
+├── LICENSE
+└── README.md               # Diese Datei
 ```
 
 ## 🐛 Troubleshooting
 
 ### Arduino wird nicht erkannt
-- CH340G Treiber installieren: [Download](http://www.wch.cn/downloads/CH341SER_ZIP.html)
-- Anderes USB-Kabel versuchen
-- Anderen USB-Port versuchen
+- CH340-Treiber installieren (siehe oben).
+- Anderes USB-Kabel versuchen (manche laden nur), anderen USB-Port versuchen.
+
+### Upload schlägt fehl
+- `Zugriff verweigert`: Der Port ist belegt. Serial Monitor, deej, die Electron-App und ggf. die IDE-Hilfsprozesse beenden.
+- `stk500_getsync`: Prozessor ohne "Old Bootloader" probieren.
+- Falscher Port: Der Nano erscheint als `USB-SERIAL CH340`. Alte, nicht mehr angeschlossene Einträge (Geister-Ports) im Gerätemanager unter "Ausgeblendete Geräte anzeigen" ignorieren oder deinstallieren.
+
+### deej startet nicht oder verbindet nicht
+- deej hat kein Fenster. Es läuft als Symbol im Infobereich der Taskleiste. Prüfe `logs/deej-latest-run.log` neben `deej.exe`.
+- `Can't connect to COMx! This serial port is busy`: Ein anderes Programm hält den Port (Serial Monitor, Arduino IDE, zweite deej-Instanz).
+- `A device attached to the system is not functioning` im Log: Das ist ein Treiberproblem. Erscheint der Port zwar, lässt sich aber von deej nicht öffnen, ist der CH340-Treiber (z. B. 3.9.2024.9) die wahrscheinliche Ursache. Den Treiber auf eine ältere Version wechseln, z. B. 3.5.2019.1: im Gerätemanager die CH340-Geräte inkl. Treibersoftware deinstallieren, danach den älteren Treiber installieren (`pnputil /add-driver CH341SER.INF /install` in einer Administrator-PowerShell).
+- Die COM-Nummer kann sich beim Treiberwechsel oder an einem anderen USB-Port ändern. Dann `com_port` in der `config.yaml` anpassen.
 
 ### Regler reagieren nicht
-- COM-Port in `config.yaml` prüfen
-- Arduino Code neu hochladen
-- Verkabelung prüfen (VCC, GND, OTA-Pins)
+- COM-Port in `config.yaml` prüfen.
+- Im Serial Monitor prüfen, ob alle fünf Werte kommen (siehe Schritt 3). Zeigen Regler dort immer `1023` oder `0`, liegt es an der Verkabelung (fehlende Masse, falscher Pin).
+
+### Regler laufen falsch herum
+- Einzelner Regler: `INVERT[]` im Sketch anpassen oder am Poti 5V und GND tauschen.
+- Alle Regler: `invert_sliders: true` in der `config.yaml`.
 
 ### Regler sind zittrig/springen
-- Normale Softwareversion nutzt bereits Glättung
-- Falls Probleme: `NOISE_THRESHOLD` in `.ino` erhöhen
+- `noise_reduction: high` in der `config.yaml` setzen.
+- `NUM_READINGS` oder `SNAP_MARGIN` im Sketch erhöhen.
 
-### DEEJ findet keine Anwendungen
-- Anwendung muss Audio abspielen
-- Prozessnamen überprüfen (Klein-/Großschreibung beachten)
-- `process_refresh_frequency` in config erhöhen
+### deej findet keine Anwendung
+- Programm muss schon Ton ausgegeben haben.
+- Prozessnamen mit `.exe` schreiben (Task-Manager → Details).
 
 ## 🔧 Code-Anpassungen
 
-### Anzahl der Regler ändern
+Alle Einstellungen stehen oben im Sketch `audiomixer/audiomixer.ino`:
 
-In `audiomixer.ino`:
 ```cpp
-const int NUM_SLIDERS = 5;  // Auf gewünschte Anzahl ändern
-const int ANALOG_PINS[NUM_SLIDERS] = {A0, A1, A2, A3, A4};  // Pins anpassen
+const int NUM_SLIDERS = 5;                                  // Anzahl der Regler
+const int ANALOG_PINS[NUM_SLIDERS] = {A0, A1, A2, A3, A4};  // Pins
+const bool INVERT[NUM_SLIDERS] = {true, true, true, true, true};  // Regler umkehren
+const int NUM_READINGS = 4;    // Glättung (1 = aus)
+const int SNAP_MARGIN = 3;     // Einrasten an den Anschlägen
 ```
-
-### Einfache Version ohne Glättung
-
-Für minimale Latenz (aber mit mehr Rauschen):
-1. `loop()` Funktion auskommentieren
-2. `loop_simple()` in `loop()` umbenennen
 
 ## 🤝 Beitragen
 
-Beiträge sind willkommen! 
-1. Fork das Repository
-2. Erstelle einen Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit deine Änderungen (`git commit -m 'Add some AmazingFeature'`)
-4. Push zum Branch (`git push origin feature/AmazingFeature`)
-5. Öffne einen Pull Request
+Beiträge sind willkommen:
+1. Repository forken
+2. Branch anlegen (`git checkout -b feature/MeineIdee`)
+3. Änderungen committen
+4. Pushen und Pull Request öffnen
 
 ## 📚 Ressourcen
 
-- [DEEJ Original Projekt](https://github.com/omriharel/deej)
+- [deej Original-Projekt](https://github.com/omriharel/deej)
 - [Arduino Nano Dokumentation](https://docs.arduino.cc/hardware/nano)
 - [3D-Gehäuse STL-Files](https://www.thingiverse.com/thing:4196719)
 
 ## 📄 Lizenz
 
-Dieses Projekt steht unter der MIT Lizenz - siehe [LICENSE](LICENSE) für Details.
+MIT Lizenz, siehe [LICENSE](LICENSE).
 
 ## 👨‍💻 Autor
 
@@ -224,9 +221,5 @@ Dieses Projekt steht unter der MIT Lizenz - siehe [LICENSE](LICENSE) für Detail
 
 ## 🙏 Danksagungen
 
-- [omriharel](https://github.com/omriharel) für das originale DEEJ-Projekt
+- [omriharel](https://github.com/omriharel) für das originale deej-Projekt
 - Die Arduino Community
-
----
-
-**Viel Spaß beim Basteln! 🎚️🎵**
