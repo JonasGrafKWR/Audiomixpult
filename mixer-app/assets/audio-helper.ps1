@@ -12,6 +12,11 @@
 # wie "spotify.exe" (Groß-/Kleinschreibung egal, ".exe" wird ergänzt).
 # Werte (value) liegen zwischen 0.0 und 1.0.
 
+param(
+  # Prozess-ID der App: Beendet sich die App (auch hart), beendet sich der Helfer ebenfalls
+  [int]$ParentPid = 0
+)
+
 $ErrorActionPreference = 'Stop'
 
 $code = @"
@@ -82,6 +87,16 @@ interface ISimpleAudioVolume {
 }
 
 public static class AudioCtl {
+  // Beendet diesen Prozess, sobald der Elternprozess (die App) nicht mehr läuft
+  public static void ExitWithParent(int pid) {
+    var t = new System.Threading.Thread(() => {
+      try { Process.GetProcessById(pid).WaitForExit(); } catch { }
+      Environment.Exit(0);
+    });
+    t.IsBackground = true;
+    t.Start();
+  }
+
   const int Render = 0;   // Wiedergabe
   const int Capture = 1;  // Aufnahme (Mikrofon)
   static Guid IidEndpoint = new Guid("5CDF2C82-841E-4546-9722-0CF74078229A");
@@ -184,6 +199,8 @@ public static class AudioCtl {
 "@
 
 Add-Type -TypeDefinition $code
+
+if ($ParentPid -gt 0) { [AudioCtl]::ExitWithParent($ParentPid) }
 
 [Console]::InputEncoding = New-Object System.Text.UTF8Encoding($false)
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)

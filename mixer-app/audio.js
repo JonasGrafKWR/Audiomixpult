@@ -41,8 +41,9 @@ class AudioHelper {
     this.ready = false;
 
     const child = spawn('powershell.exe', [
-      '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', this.scriptPath
-    ], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+      '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', this.scriptPath,
+      '-ParentPid', String(process.pid)
+    ],{ windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
     this.child = child;
 
     readline.createInterface({ input: child.stdout }).on('line', (line) => this._onLine(line));
